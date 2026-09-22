@@ -105,16 +105,16 @@ direct `ip:port` answers 200 means that and nothing else.
 | | |
 |---|---|
 | `/` | ComfyUI |
-| `/pod/app/lab/` | **ImageLab** — use this one |
-| `/lab/` | same app, served by nginx |
-| `/pod/app/` | model installer + file APIs |
-| `/imagelab/*` | ImageLabCore: `hashes`, `downloads`, `favorites`, `version` |
+| `/imagelab/` | **ImageLab**, served by nginx off the volume |
+| `/imagelab/api/*` | ImageLabCore: `hashes`, `downloads`, `models`, `favorites`, `version` |
+| `/pod/app/api/files`, `/pod/app/api/node` | PUT only: what `push.sh` and `push-node.sh` write through |
 | `/pod/logs/download.log` | model download progress |
 | `/pod/logs/models-complete` | 200 once every model has landed |
 
-Behind nginx basic auth: user `COMFY_LOCAL_USER` (`imagelab`), password `COMFY_LOCAL_TOKEN`. `/pod/`
-is the pod's own app; `/imagelab/` is ImageLabCore inside ComfyUI. ImageLab itself calls only
-ComfyUI and `/imagelab/*`, never `/pod/app`, so the pod routes can change without an ImageLab build.
+Behind nginx basic auth: user `COMFY_LOCAL_USER` (`imagelab`), password `COMFY_LOCAL_TOKEN`.
+ImageLab calls only ComfyUI and `/imagelab/api/*`, never `/pod/app`, so the pod routes can change
+without an ImageLab build. Models are installed from ImageLab's model browser, which goes through
+`/imagelab/api/downloads`.
 
 First boot fetches **62.2 GB across 88 files** from `models.txt`. Civitai answers 403 to some
 aria2 requests — normal, the curl fallback picks them up. Watch `models-complete`.

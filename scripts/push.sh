@@ -43,5 +43,5 @@ else
   echo "  (no ImageLab/dist beside this repo — run npm run build there first)" >&2
 fi
 
-echo "pushed $ok file(s), $fail failure(s) -> ${BASE}/pod/app/lab/"
+echo "pushed $ok file(s), $fail failure(s) -> ${BASE}/imagelab/"
 [ "$fail" -eq 0 ]

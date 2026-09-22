@@ -67,10 +67,10 @@ RUN pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
     && python -c "import onnxruntime as ort, sys; p=ort.get_available_providers(); print('ort', ort.__version__, p); sys.exit(0 if 'CUDAExecutionProvider' in p else 1)"
 
 # ---- ImageLabCore: the API the front end talks to ---------------------------------
-# This is what answers /imagelab/hashes, /imagelab/downloads and /imagelab/favorites. Without it
+# This is what answers /imagelab/api/hashes, /imagelab/api/downloads and /imagelab/api/favorites. Without it
 # the app cannot ask a server what models it has, and the model browser shows nothing. Pinned like
 # every other pack above.
-RUN install-node https://github.com/angelmankel/ImageLabCore 700b8dfe5c8ead7f8588d3eb658e00b96f31c4fe ImageLabCore
+RUN install-node https://github.com/angelmankel/ImageLabCore 92a2b293ffc6c90072e7442ca0a41204ef1fd61e ImageLabCore
 
 # ---- Runtime files --------------------------------------------------------------
 COPY models.txt download-models.sh start.sh nginx.conf.template live.py /opt/imagelab/
@@ -80,8 +80,8 @@ COPY app /opt/imagelab/app
 # The built dist/ is cloned at a pin. dist/ is committed there precisely so this needs no npm in the image build. What lands here is
 # only the seed: scripts/push.sh replaces it on a running pod without a rebuild.
 RUN git clone --depth 1 https://github.com/angelmankel/ImageLab /tmp/imagelab \
-    && git -C /tmp/imagelab fetch --depth 1 origin b59d501c5d607f7fb65815de8f88523e3709251d \
-    && git -C /tmp/imagelab checkout --quiet b59d501c5d607f7fb65815de8f88523e3709251d \
+    && git -C /tmp/imagelab fetch --depth 1 origin 836a2ac9c02cda8de831625fc8b1e90e4a9a1885 \
+    && git -C /tmp/imagelab checkout --quiet 836a2ac9c02cda8de831625fc8b1e90e4a9a1885 \
     && mkdir -p /opt/imagelab/app/lab \
     && cp -a /tmp/imagelab/dist/. /opt/imagelab/app/lab/ \
     && rm -rf /tmp/imagelab

@@ -1,7 +1,7 @@
 # ImageLabDocker
 
 The pod image. ComfyUI with every custom node pinned to a commit, a 62 GB model manifest fetched
-on first boot, a small web app for installing more, and the scripts that start, update and tear
+on first boot, a small file API for updating code on a live pod, and the scripts that start, update and tear
 down a RunPod box.
 
 Pushing to `main` builds `ghcr.io/angelmankel/imagelab-pod:latest` through GitHub Actions.

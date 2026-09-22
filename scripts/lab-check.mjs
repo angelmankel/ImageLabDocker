@@ -1,7 +1,7 @@
 /**
  * Open ImageLab on a pod in a headless browser and say whether it actually works.
  *
- *   node scripts/lab-check.mjs http://<ip:port>/pod/app/lab/ [shot.png]
+ *   node scripts/lab-check.mjs http://<ip:port>/imagelab/ [shot.png]
  *
  * A white screen and a page that loads but reaches no ComfyUI look identical from curl: both are
  * HTTP 200. This loads the page for real, reports how many children #root grew, and prints the

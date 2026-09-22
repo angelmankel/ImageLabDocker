@@ -46,11 +46,21 @@ http {
 
     # ImageLab, straight off the volume. Same origin as ComfyUI, so its fetches and its websocket carry the
     # basic auth the browser already has, and a deep link still lands on index.html.
-    location /lab/ {
+    location /imagelab/ {
       alias /workspace/imagelab-app/lab/;
-      try_files $uri $uri/ /lab/index.html;
+      try_files $uri $uri/ /imagelab/index.html;
     }
-    location = /lab { return 301 /lab/; }
+    location = /imagelab { return 301 /imagelab/; }
+    # ImageLabCore's API is a ComfyUI route. The longer prefix wins over /imagelab/ above.
+    location /imagelab/api/ {
+      proxy_pass http://127.0.0.1:${COMFY_PORT};
+      proxy_http_version 1.1;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_read_timeout 3600s;
+      proxy_buffering off;
+      proxy_request_buffering off;
+    }
     location /pod/logs/ {
       alias /workspace/imagelab-logs/;
       autoindex on;

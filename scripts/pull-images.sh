@@ -13,7 +13,7 @@
 #   /history                 every prompt this ComfyUI has run, with the images each produced.
 #                            The app saves through PreviewImage, so these live in temp/ and
 #                            ComfyUI wipes temp/ on its next start — they are gone after a resume.
-#   /imagelab/favorites      anything explicitly starred, copied out of temp/ into a dated tree by
+#   /imagelab/api/favorites      anything explicitly starred, copied out of temp/ into a dated tree by
 #                            ImageLabCore. These survive a restart but not a terminate.
 set -euo pipefail
 
@@ -55,14 +55,14 @@ curl -sS -u "$AUTH" "${BASE}/history" \
       save "${BASE}/view?${query}" "$filename"
     done
 
-echo "-- from /imagelab/favorites --"
+echo "-- from /imagelab/api/favorites --"
 # 404 is fine: it only means this pod's image predates ImageLabCore.
-if curl -sSf -u "$AUTH" -o /tmp/favs.json "${BASE}/imagelab/favorites" 2>/dev/null; then
+if curl -sSf -u "$AUTH" -o /tmp/favs.json "${BASE}/imagelab/api/favorites" 2>/dev/null; then
   jq -r '.favorites[]? | select(.filename)
          | "date=\((.date // "")|@uri)&filename=\(.filename|@uri)\tfav-\(.date // "undated")-\(.filename)"' /tmp/favs.json \
     | while IFS=$'\t' read -r query name; do
         [ -n "$name" ] || continue
-        save "${BASE}/imagelab/favorites/view?${query}" "$name"
+        save "${BASE}/imagelab/api/favorites/view?${query}" "$name"
       done
   rm -f /tmp/favs.json
 else

@@ -42,8 +42,8 @@ curl -sS -o /dev/null -w '  /manager/reboot -> HTTP %{http_code}\n' -m 20 \
 
 for i in $(seq 1 40); do
   sleep 3
-  if [ "$(curl -s -o /dev/null -w '%{http_code}' -m 5 -u "$AUTH" "${BASE}/imagelab/hashes")" = "200" ]; then
-    echo "  ComfyUI back after ~$((i*3))s, /imagelab/hashes answering"
+  if [ "$(curl -s -o /dev/null -w '%{http_code}' -m 5 -u "$AUTH" "${BASE}/imagelab/api/hashes")" = "200" ]; then
+    echo "  ComfyUI back after ~$((i*3))s, /imagelab/api/hashes answering"
     exit 0
   fi
 done
