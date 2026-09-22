@@ -83,6 +83,8 @@ curl -s https://api.runpod.io/graphql -H "Authorization: Bearer $RUNPOD_API_KEY"
   but takes a volume fine.
 - `COMFY_AUTH_USER` / `COMFY_AUTH_TOKEN` must be `COMFY_LOCAL_USER` / `COMFY_LOCAL_TOKEN` so the saved
   Traefik login keeps working. The image defaults the user to `imagelab`.
+- `COMFY_AUTH_ALIASES` (optional, space-separated) adds more user names with the same password, for
+  a browser that still sends an older one. Add `{ key: \\\"COMFY_AUTH_ALIASES\\\", value: \\\"name\\\" }` to `env`.
 
 Read the address once it is actually serving:
 

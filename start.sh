@@ -76,6 +76,11 @@ cp -rn /opt/imagelab/workflows/. /workspace/ComfyUI/user/default/workflows/ 2>/d
 # ---- reverse proxy with basic auth --------------------------------------------------
 mkdir -p /tmp/nginx-body /tmp/nginx-proxy /tmp/nginx-fastcgi /tmp/nginx-uwsgi /tmp/nginx-scgi
 printf '%s:%s\n' "$COMFY_AUTH_USER" "$(openssl passwd -apr1 "$COMFY_AUTH_TOKEN")" > /tmp/htpasswd
+# COMFY_AUTH_ALIASES: extra user names, space-separated, same password. For a browser or proxy
+# that still has an older user name saved; set it in the pod env, never bake it in.
+for alias in ${COMFY_AUTH_ALIASES:-}; do
+  printf '%s:%s\n' "$alias" "$(openssl passwd -apr1 "$COMFY_AUTH_TOKEN")" >> /tmp/htpasswd
+done
 sed -e "s/\${PROXY_PORT}/$PROXY_PORT/g" -e "s/\${COMFY_PORT}/$COMFY_PORT/g" -e "s/\${APP_PORT}/$APP_PORT/g" /opt/imagelab/nginx.conf.template > /tmp/nginx.conf
 
 # Check the generated config before trusting it. nginx is the only way in — ComfyUI, ImageLab and
