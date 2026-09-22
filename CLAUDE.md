@@ -81,6 +81,9 @@ curl -s https://api.runpod.io/graphql -H "Authorization: Bearer $RUNPOD_API_KEY"
 - **Never pass `volumeInGb` for a B200 or B300.** Blackwell datacentre nodes have no local disk and
   every attempt returns "no instances available" until it is dropped. An RTX 5090 is Blackwell too
   but takes a volume fine.
+- **Without a volume, `/workspace` is the container disk**, so a B200/B300 needs
+  `containerDiskInGb: 150` or the ~87 GB of models do not fit. Deploying the template on a B200
+  silently drops its volume and leaves 30 GB: raise the container disk (Edit Pod, or `podEditJob`).
 - `COMFY_AUTH_USER` / `COMFY_AUTH_TOKEN` must be `COMFY_LOCAL_USER` / `COMFY_LOCAL_TOKEN` so the saved
   Traefik login keeps working. The image defaults the user to `imagelab`.
 - `COMFY_AUTH_ALIASES` (optional, space-separated) adds more user names with the same password, for
