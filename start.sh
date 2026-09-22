@@ -63,6 +63,16 @@ for d in output input; do
   fi
 done
 
+# ComfyUI's user dir holds saved workflows and settings. In the image layer a STOP wipes it, so it
+# lives on the volume like output/ and input/. Workflows shipped in the image (this repo's
+# workflows/) are copied in only when missing: one saved on the pod always wins.
+mkdir -p /workspace/ComfyUI/user/default/workflows
+if [ ! -L /opt/ComfyUI/user ]; then
+  cp -rn /opt/ComfyUI/user/. /workspace/ComfyUI/user/ 2>/dev/null || true
+  rm -rf /opt/ComfyUI/user; ln -s /workspace/ComfyUI/user /opt/ComfyUI/user
+fi
+cp -rn /opt/imagelab/workflows/. /workspace/ComfyUI/user/default/workflows/ 2>/dev/null || true
+
 # ---- reverse proxy with basic auth --------------------------------------------------
 mkdir -p /tmp/nginx-body /tmp/nginx-proxy /tmp/nginx-fastcgi /tmp/nginx-uwsgi /tmp/nginx-scgi
 printf '%s:%s\n' "$COMFY_AUTH_USER" "$(openssl passwd -apr1 "$COMFY_AUTH_TOKEN")" > /tmp/htpasswd

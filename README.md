@@ -20,5 +20,6 @@ Part of a three-repo project — see **CLAUDE.md**, which is the entry point for
 scripts/push.sh       <ip:port>   # ImageLab + pod app onto a running pod, no rebuild
 scripts/push-node.sh  <ip:port>   # ImageLabCore + in-place ComfyUI restart, ~15s
 scripts/pull-images.sh <ip:port>  # every generation -> /mnt/games/images/runpod/MM-DD-YYYY/
+scripts/workflows.sh pull|push <ip:port>  # ComfyUI saved workflows <-> workflows/
 scripts/lab-check.mjs <url>       # load a page offscreen, report console + render
 ```

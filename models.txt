@@ -20,12 +20,22 @@ https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4p
 https://huggingface.co/Kim2091/UltraSharp/resolve/main/4x-UltraSharp.pth	upscale_models	4x-UltraSharp.pth	66961958
 https://huggingface.co/Kim2091/UltraSharp/resolve/main/4x-UltraSharp.safetensors	upscale_models	4x-UltraSharp.safetensors	66864028
 
-# --- Anima workflow ---
+# --- Anima workflows (workflows/Anima *.json) ---
+# Anima files are the diffusion model only (no text encoder, no VAE), so they go in diffusion_models for UNETLoader,
+# never in checkpoints: CheckpointLoaderSimple cannot load them.
 civitai:3170772	loras	Anima_Base_ygiohdsod_ydms.safetensors	420248796
-civitai:3263843	checkpoints	anima_turboV11.safetensors	4182230656
+civitai:3263843	diffusion_models	anima_turboV11.safetensors	4182230656
+civitai:3126581	diffusion_models	anima_aestheticV11.safetensors	4182230656
 https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/diffusion_models/anima-base-v1.0.safetensors	diffusion_models	anima-base-v1.0.safetensors	4182218328
 https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/text_encoders/qwen_3_06b_base.safetensors	text_encoders	qwen_3_06b_base.safetensors	1192135096
 https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors	vae	qwen_image_vae.safetensors	253806246
+
+# --- Pony Realism (workflows/Pony Realism.json) ---
+civitai:914390	checkpoints	ponyRealism_V22.safetensors	7105348856
+civitai:652659	loras	LCMV2-PONYplus-PAseer.safetensors	53857340
+
+# --- Mature Citron IL (workflows/Mature Citron IL.json) ---
+civitai:2760019	checkpoints	matureCitronIL_Unstable30.safetensors	7307752976
 
 # --- BiRefNet_toonout for ComfyUI-RMBG (exactly the files/layout the node's own downloader would create) ---
 https://huggingface.co/1038lab/BiRefNet/resolve/main/BiRefNet_toonout.safetensors	RMBG/BiRefNet	BiRefNet_toonout.safetensors	884878824

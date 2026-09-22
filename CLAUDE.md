@@ -22,7 +22,8 @@ document.
    `/mnt/games/images/runpod/MM-DD-YYYY/`. A pod's disk is backed up nowhere and a terminate is
    final. Do it before a *resume* too — the app saves through `PreviewImage` into ComfyUI's
    `temp/`, and ComfyUI wipes `temp/` when it starts.
-2. **Before terminating a pod, push all three repos.** `git status` in each, commit, push.
+2. **Before terminating a pod, pull its workflows and push all three repos.** `scripts/workflows.sh pull <ip:port>`,
+   then `git status` in each repo, commit, push.
 3. **Ask before spending GPU.** A pod bills whether or not it renders. Say the hourly rate when
    you start one; stop it when it goes idle.
 4. **Every retry is a NEW project. Never overwrite a render.** The failures are the data.
@@ -140,6 +141,25 @@ is deliberate — it stops a rebuild wiping live edits — and it surprises ever
 
 A rebuild is only needed for `start.sh`, `nginx.conf.template`, the `Dockerfile`, a new custom
 node, a new Python dependency, or to move the pinned ImageLab/ImageLabCore commits.
+
+## Workflows
+
+ComfyUI saved workflows are kept in `workflows/` in this repo, one `.json` per workflow (subfolders
+allowed). That is the copy that survives a terminate.
+
+```sh
+scripts/workflows.sh pull <ip:port>   # pod -> workflows/, then commit
+scripts/workflows.sh push <ip:port>   # workflows/ -> pod, overwrites same-named files
+```
+
+The image carries `workflows/` and `start.sh` copies it onto a new pod at boot, only where a file
+is missing. ComfyUI's user dir is on the volume, so a stop keeps workflows too. A workflow edit
+does not trigger an image build (`workflows/` is not in the build's `paths:`), so `push` is how an
+edit reaches a running pod, and the next image build picks it up.
+
+Before saving a workflow, check every node and widget against `/object_info` and run it once
+through `/prompt`. Anima is a diffusion model only: `UNETLoader` from `diffusion_models`, with
+`CLIPLoader` (`qwen_3_06b_base`, type `stable_diffusion`) and `VAELoader` (`qwen_image_vae`).
 
 ## Stopping, resuming, terminating
 

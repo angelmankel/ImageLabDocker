@@ -75,6 +75,7 @@ RUN install-node https://github.com/angelmankel/ImageLabCore 92a2b293ffc6c90072e
 # ---- Runtime files --------------------------------------------------------------
 COPY models.txt download-models.sh start.sh nginx.conf.template live.py /opt/imagelab/
 COPY app /opt/imagelab/app
+COPY workflows /opt/imagelab/workflows
 
 # ---- ImageLab, the web front end ---------------------------------------------------
 # The built dist/ is cloned at a pin. dist/ is committed there precisely so this needs no npm in the image build. What lands here is
