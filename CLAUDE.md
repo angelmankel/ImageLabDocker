@@ -86,6 +86,10 @@ curl -s https://api.runpod.io/graphql -H "Authorization: Bearer $RUNPOD_API_KEY"
 - `COMFY_AUTH_ALIASES` (optional, space-separated) adds more user names with the same password, for
   a browser that still sends an older one. Add `{ key: \\\"COMFY_AUTH_ALIASES\\\", value: \\\"name\\\" }` to `env`.
 
+**Or from the RunPod console:** the private template **ImageLab Pod** (`63ya3ikzof`) has the image,
+disks, port and env already set, including the secrets. Pick Secure Cloud and a US GPU. If
+`.env` credentials change, update the template too: it holds its own copy.
+
 Read the address once it is actually serving:
 
 ```sh
