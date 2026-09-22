@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>imagelab pod</title>
+<style>
+  :root { --bg:#0f1016; --card:#181a24; --line:#282b39; --ink:#e8eaf4; --dim:#98a0bb; --accent:#7aa2ff;
+          --ok:#54d18c; --bad:#ff6b6b; --warn:#ffc857; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:rgba(15,16,22,.94); backdrop-filter:blur(8px);
+           border-bottom:1px solid var(--line); padding:12px 16px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  h1 { font-size:16px; margin:0 12px 0 0; font-weight:650; }
+  nav { display:flex; gap:4px; }
+  nav button { background:transparent; border:1px solid transparent; color:var(--dim); padding:6px 12px; border-radius:8px; cursor:pointer; font:inherit; }
+  nav button.on { background:var(--card); border-color:var(--line); color:var(--ink); }
+  nav button .pill { background:var(--accent); color:#0b0d14; border-radius:99px; padding:0 6px; font-size:11px; font-weight:700; margin-left:6px; }
+  main { max-width:1300px; margin:0 auto; padding:16px; }
+  .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:16px; }
+  input, select, button, textarea { font:inherit; color:var(--ink); background:#141622; border:1px solid var(--line); border-radius:9px; padding:8px 11px; }
+  input:focus, select:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+  .search { flex:1 1 260px; }
+  button.primary { background:var(--accent); color:#0b0d14; border:0; font-weight:650; cursor:pointer; }
+  button.ghost { cursor:pointer; }
+  button:disabled { opacity:.45; cursor:default; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { border:1px solid var(--line); background:#141622; color:var(--dim); border-radius:99px; padding:5px 11px; font-size:13px; cursor:pointer; }
+  .chip.on { background:var(--accent); border-color:var(--accent); color:#0b0d14; font-weight:600; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:14px; }
+  .model { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; cursor:pointer; display:flex; flex-direction:column; }
+  .model:hover { border-color:var(--accent); }
+  .thumb { aspect-ratio:3/4; background:#0c0d13 center/cover no-repeat; position:relative; }
+  .thumb .badges { position:absolute; left:8px; top:8px; display:flex; gap:5px; flex-wrap:wrap; }
+  .badge { background:rgba(10,11,16,.82); border:1px solid var(--line); border-radius:6px; padding:2px 7px; font-size:11px; font-weight:600; }
+  .badge.have { background:var(--ok); color:#07130c; border-color:var(--ok); }
+  .meta { padding:10px 11px; display:grid; gap:4px; }
+  .meta .name { font-size:13.5px; font-weight:600; line-height:1.3; }
+  .meta .sub { font-size:11.5px; color:var(--dim); display:flex; gap:8px; justify-content:space-between; }
+  .empty, .loading { color:var(--dim); padding:40px 0; text-align:center; }
+  dialog { border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:14px; padding:0; max-width:860px; width:calc(100% - 32px); }
+  dialog::backdrop { background:rgba(4,5,9,.7); }
+  .sheet { display:grid; grid-template-columns:260px 1fr; gap:0; }
+  .sheet .shot { background:#0c0d13 center/cover no-repeat; min-height:340px; }
+  .sheet .body { padding:16px; display:grid; gap:12px; align-content:start; }
+  .sheet h3 { margin:0; font-size:17px; }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:13px; }
+  .kv b { color:var(--dim); font-weight:500; }
+  .words { display:flex; gap:5px; flex-wrap:wrap; }
+  .words code { background:#141622; border:1px solid var(--line); border-radius:6px; padding:2px 7px; font-size:12px; }
+  .jobs { display:grid; gap:12px; }
+  .job { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .bar { height:6px; background:#0c0d13; border-radius:99px; overflow:hidden; margin-top:8px; }
+  .bar > i { display:block; height:100%; background:var(--accent); width:0; transition:width .4s; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); } .dim { color:var(--dim); }
+  pre { background:#0c0d13; border:1px solid var(--line); border-radius:8px; padding:9px; overflow:auto; font-size:11.5px; margin:8px 0 0; max-height:170px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td, th { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--dim); font-weight:500; }
+  @media (max-width:720px) { .sheet { grid-template-columns:1fr; } .sheet .shot { min-height:220px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>imagelab pod</h1>
+  <nav>
+    <button data-tab="browse" class="on">Browse Civitai</button>
+    <button data-tab="downloads">Downloads<span class="pill" id="njobs" hidden>0</span></button>
+    <button data-tab="installed">On the volume</button>
+  </nav>
+  <span class="dim" id="keystate" style="margin-left:auto; font-size:12.5px"></span>
+</header>
+
+<main>
+  <section id="browse">
+    <div class="filters">
+      <input class="search" id="q" placeholder="search civitai…  (enter)">
+      <select id="sort"></select>
+      <select id="period">
+        <option>AllTime</option><option>Year</option><option>Month</option><option>Week</option>
+      </select>
+      <label class="chip" id="nsfwChip"><input type="checkbox" id="nsfw" style="width:auto;margin-right:6px">NSFW</label>
+    </div>
+    <div class="filters"><span class="dim" style="font-size:12.5px;min-width:44px">type</span><div class="chips" id="types"></div></div>
+    <div class="filters"><span class="dim" style="font-size:12.5px;min-width:44px">base</span><div class="chips" id="bases"></div></div>
+    <div id="grid" class="grid"></div>
+    <div id="status" class="loading">loading…</div>
+    <div style="text-align:center; margin:18px 0"><button id="more" class="ghost" hidden>Load more</button></div>
+  </section>
+
+  <section id="downloads" hidden><div id="jobs" class="jobs"></div></section>
+
+  <section id="installed" hidden>
+    <div id="inv" class="dim">loading…</div>
+    <h2 style="font-size:13px;color:var(--dim);margin-top:22px">Lines to copy into ImageLabDocker/models.txt</h2>
+    <pre id="extra">nothing added yet</pre>
+  </section>
+</main>
+
+<dialog id="sheet"></dialog>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const api = (p, o) => fetch("/pod/app" + p, o).then(r => r.json());
+const size = (n) => !n ? "?" : n >= 1e9 ? (n/1073741824).toFixed(2)+" GB" : (n/1048576).toFixed(0)+" MB";
+const num = (n) => n >= 1e6 ? (n/1e6).toFixed(1)+"M" : n >= 1e3 ? (n/1e3).toFixed(0)+"k" : n;
+const img = (url) => url ? `/pod/app/api/civitai/image?url=${encodeURIComponent(url)}` : "";
+const state = { types: new Set(), bases: new Set(), cursor: null, items: [], busy: false };
+
+// ---- tabs ----
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
+  for (const id of ["browse", "downloads", "installed"]) $("#" + id).hidden = id !== b.dataset.tab;
+  if (b.dataset.tab !== "browse") refreshLocal();
+});
+
+// ---- filters ----
+function chips(host, values, set) {
+  host.innerHTML = "";
+  for (const v of values) {
+    const el = document.createElement("button");
+    el.className = "chip"; el.textContent = v;
+    el.onclick = () => { set.has(v) ? set.delete(v) : set.add(v); el.classList.toggle("on"); search(true); };
+    host.appendChild(el);
+  }
+}
+
+async function boot() {
+  const m = await api("/api/civitai/meta");
+  chips($("#types"), m.types.slice(0, 8), state.types);
+  chips($("#bases"), m.bases, state.bases);
+  for (const s of m.sorts) $("#sort").add(new Option(s, s));
+  $("#keystate").textContent = m.key ? "civitai key loaded" : "no CIVITAI_API_KEY — some downloads will fail";
+  $("#keystate").className = m.key ? "dim" : "bad";
+  search(true);
+}
+
+async function search(reset) {
+  if (state.busy) return;
+  state.busy = true;
+  if (reset) { state.cursor = null; state.items = []; $("#grid").innerHTML = ""; }
+  $("#status").textContent = "loading…"; $("#status").hidden = false;
+  const p = new URLSearchParams({ limit: "24", sort: $("#sort").value || "Most Downloaded",
+    period: $("#period").value, nsfw: $("#nsfw").checked ? "true" : "false" });
+  if ($("#q").value.trim()) p.set("query", $("#q").value.trim());
+  if (state.cursor) p.set("cursor", state.cursor);
+  for (const t of state.types) p.append("types", t);
+  for (const b of state.bases) p.append("bases", b);
+  const r = await api("/api/civitai/search?" + p);
+  state.busy = false;
+  if (r.error) { $("#status").innerHTML = `<span class="bad">${r.error}</span>`; return; }
+  state.cursor = r.cursor;
+  state.items.push(...r.items);
+  draw(r.items);
+  $("#status").hidden = state.items.length > 0;
+  if (!state.items.length) { $("#status").hidden = false; $("#status").textContent = "nothing matched those filters"; }
+  $("#more").hidden = !r.cursor;
+}
+
+function draw(items) {
+  const frag = document.createDocumentFragment();
+  for (const m of items) {
+    const v = m.versions[0] || {};
+    const el = document.createElement("article");
+    el.className = "model";
+    el.innerHTML = `
+      <div class="thumb" style="background-image:url('${img(m.cover)}')">
+        <div class="badges">
+          <span class="badge">${m.type}</span>
+          ${v.base ? `<span class="badge">${v.base}</span>` : ""}
+          ${m.installed ? `<span class="badge have">installed</span>` : ""}
+        </div>
+      </div>
+      <div class="meta">
+        <div class="name">${m.name}</div>
+        <div class="sub"><span>${num(m.downloads)} downloads</span><span>${size(v.files?.[0]?.bytes)}</span></div>
+      </div>`;
+    el.onclick = () => open(m);
+    frag.appendChild(el);
+  }
+  $("#grid").appendChild(frag);
+}
+
+// ---- one model ----
+function open(m) {
+  const d = $("#sheet");
+  const pick = (i) => {
+    const v = m.versions[i];
+    d.querySelector(".shot").style.backgroundImage = `url('${img(v.images[0] || m.cover)}')`;
+    d.querySelector("#vmeta").innerHTML = `
+      <b>base</b><span>${v.base || "?"}</span>
+      <b>file</b><span>${v.files[0]?.name || "—"} · ${size(v.files[0]?.bytes)}</span>
+      <b>published</b><span>${v.published || "—"}</span>
+      <b>goes to</b><span>models/${m.folder}/</span>`;
+    d.querySelector("#words").innerHTML = (v.words || []).map(w => `<code>${w}</code>`).join("") || `<span class="dim">no trigger words</span>`;
+    d.querySelector("#install").disabled = !v.files.length;
+    d.querySelector("#install").textContent = v.installed ? "Installed — download again" : "Install to the volume";
+    d.querySelector("#install").onclick = async () => {
+      d.querySelector("#install").disabled = true;
+      await api("/api/install", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ src: String(v.id), folder: m.folder, filename: v.files[0].name }) });
+      d.close(); document.querySelector('nav button[data-tab="downloads"]').click();
+    };
+  };
+  d.innerHTML = `
+    <div class="sheet">
+      <div class="shot"></div>
+      <div class="body">
+        <h3>${m.name}</h3>
+        <div class="dim" style="font-size:13px">by ${m.creator} · ${m.type} · ${num(m.downloads)} downloads · ${num(m.thumbsUp)} 👍</div>
+        <select id="ver">${m.versions.map((v, i) => `<option value="${i}">${v.name} — ${v.base}${v.installed ? " ✓ installed" : ""}</option>`).join("")}</select>
+        <div class="kv" id="vmeta"></div>
+        <div class="words" id="words"></div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="primary" id="install">Install to the volume</button>
+          <a class="chip" href="https://civitai.com/models/${m.id}" target="_blank" rel="noreferrer">open on civitai</a>
+          <button class="ghost" style="margin-left:auto" onclick="document.getElementById('sheet').close()">close</button>
+        </div>
+      </div>
+    </div>`;
+  d.querySelector("#ver").onchange = (e) => pick(+e.target.value);
+  pick(0);
+  d.showModal();
+}
+
+// ---- downloads + volume ----
+async function refreshLocal() {
+  const s = await api("/api/state");
+  const jobs = Object.values(s.jobs || {}).sort((a, b) => b.id - a.id);
+  const live = jobs.filter(j => j.state === "downloading" || j.state === "starting").length;
+  $("#njobs").hidden = !live; $("#njobs").textContent = live;
+  $("#jobs").innerHTML = jobs.length ? jobs.map(j => `
+    <div class="job">
+      <div style="display:flex;justify-content:space-between;gap:10px">
+        <strong>${j.filename}</strong>
+        <span class="${j.state === "done" ? "ok" : j.state === "error" ? "bad" : "dim"}">${j.state} · ${j.pct || 0}%</span>
+      </div>
+      <div class="dim" style="font-size:12.5px">${j.name || ""} → models/${j.folder}/</div>
+      <div class="bar"><i style="width:${j.pct || 0}%"></i></div>
+      ${j.log?.length ? `<details><summary class="dim" style="font-size:12.5px;margin-top:6px">log</summary><pre>${j.log.slice(-10).join("\n").replace(/</g, "&lt;")}</pre></details>` : ""}
+    </div>`).join("") : `<div class="empty">nothing downloaded yet</div>`;
+  $("#inv").innerHTML = "<table><tr><th>folder</th><th>file</th><th>size</th></tr>" +
+    Object.entries(s.models).flatMap(([f, l]) => l.map(m =>
+      `<tr><td class="dim">${f}</td><td>${m.name}</td><td class="dim">${size(m.bytes)}</td></tr>`)).join("") + "</table>";
+  $("#extra").textContent = (s.extra || []).filter(l => l && !l.startsWith("#")).join("\n") || "nothing added yet";
+  if (live) setTimeout(refreshLocal, 1500);
+}
+
+$("#q").onkeydown = (e) => { if (e.key === "Enter") search(true); };
+$("#sort").onchange = () => search(true);
+$("#period").onchange = () => search(true);
+$("#nsfw").onchange = () => search(true);
+$("#more").onclick = () => search(false);
+boot(); refreshLocal(); setInterval(refreshLocal, 5000);
+</script>
+</body>
+</html>

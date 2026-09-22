@@ -1,0 +1,88 @@
+# Model manifest: URL <TAB> target folder (under MODELS_DIR) <TAB> exact filename <TAB> expected size in bytes
+# "civitai:<versionId>" expands to https://civitai.com/api/download/models/<versionId>?token=$CIVITAI_API_KEY
+# Sizes come from Comfy Cloud's asset listing / Hugging Face headers and are used to skip finished files.
+
+# --- Illustrious (SDXL) workflow ---
+# The two-pass Illustrious workflow: pass 1 on plain WAI (no lora, no merge) decides the
+# composition, then the latent is upscaled 1.25x and repainted by pass 2 on the style stack below. All five files
+# are required by it; the names are the ones the graphs ask for, which are Comfy Cloud's names, not Civitai's
+# (wai-illustrious-sdxl.safetensors is Civitai's waiIllustriousSDXL_v150.safetensors renamed on download).
+civitai:2167369	checkpoints	wai-illustrious-sdxl.safetensors	6938040682
+civitai:1023901	checkpoints	illustriousXLPersonalMerge_v30Noob10based.safetensors	6938042190
+civitai:2938105	checkpoints	hexus_etnix.safetensors	6938041520
+civitai:3321542	checkpoints	spicySouls_12.safetensors	6938042794
+civitai:1675894	loras	Yu-Gi-Oh_Kagami_Takahiro_Style.safetensors	228463172
+civitai:1480107	loras	Yugioh_GX_Illustrious_X1_SD8.safetensors	170627948
+civitai:1736373	loras	illustrious-detailer.safetensors	228465628
+civitai:1021743	loras	retro_scifi_artstyle_illustriousXL-000021.safetensors	228460796
+https://huggingface.co/TencentARC/t2i-adapter-lineart-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	TencentARC__t2i-adapter-lineart-sdxl-10__diffusion_pytorch_model.fp16.safetensors	158060440
+https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth	upscale_models	RealESRGAN_x4plus_anime_6B.pth	17938799
+https://huggingface.co/Kim2091/UltraSharp/resolve/main/4x-UltraSharp.pth	upscale_models	4x-UltraSharp.pth	66961958
+https://huggingface.co/Kim2091/UltraSharp/resolve/main/4x-UltraSharp.safetensors	upscale_models	4x-UltraSharp.safetensors	66864028
+
+# --- Anima workflow ---
+civitai:3170772	loras	Anima_Base_ygiohdsod_ydms.safetensors	420248796
+civitai:3263843	checkpoints	anima_turboV11.safetensors	4182230656
+https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/diffusion_models/anima-base-v1.0.safetensors	diffusion_models	anima-base-v1.0.safetensors	4182218328
+https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/text_encoders/qwen_3_06b_base.safetensors	text_encoders	qwen_3_06b_base.safetensors	1192135096
+https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors	vae	qwen_image_vae.safetensors	253806246
+
+# --- BiRefNet_toonout for ComfyUI-RMBG (exactly the files/layout the node's own downloader would create) ---
+https://huggingface.co/1038lab/BiRefNet/resolve/main/BiRefNet_toonout.safetensors	RMBG/BiRefNet	BiRefNet_toonout.safetensors	884878824
+https://huggingface.co/1038lab/BiRefNet/resolve/main/birefnet.py	RMBG/BiRefNet	birefnet.py	92068
+https://huggingface.co/1038lab/BiRefNet/resolve/main/BiRefNet_config.py	RMBG/BiRefNet	BiRefNet_config.py	298
+https://huggingface.co/1038lab/BiRefNet/resolve/main/config.json	RMBG/BiRefNet	config.json	402
+
+# --- AnimeLineArtPreprocessor weights for comfyui_controlnet_aux (ckpts dir is symlinked here by start.sh) ---
+https://huggingface.co/lllyasviel/Annotators/resolve/main/netG.pth	controlnet_aux_ckpts/lllyasviel/Annotators	netG.pth	217631959
+
+# ====================== anime workstation additions (2026-09-06) ======================
+# --- TAESD previews (--preview-method taesd); names must start with what comfy/latent_formats.py expects ---
+https://raw.githubusercontent.com/madebyollin/taesd/main/taesd_decoder.pth	vae_approx	taesd_decoder.pth	4913399
+https://raw.githubusercontent.com/madebyollin/taesd/main/taesdxl_decoder.pth	vae_approx	taesdxl_decoder.pth	4913541
+https://raw.githubusercontent.com/madebyollin/taesd/main/taesd3_decoder.pth	vae_approx	taesd3_decoder.pth	4940671
+https://raw.githubusercontent.com/madebyollin/taesd/main/taef1_decoder.pth	vae_approx	taef1_decoder.pth	4943336
+https://huggingface.co/lightx2v/Autoencoders/resolve/main/lighttaew2_1.safetensors	vae_approx	lighttaew2_1.safetensors	45274004
+
+# --- SDXL ControlNets for Illustrious / NoobAI (fp16). No NoobAI openpose exists; use the xinsir union (promax) for pose. ---
+https://huggingface.co/Eugeoter/noob-sdxl-controlnet-canny/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	noob-sdxl-controlnet-canny.safetensors	2502139136
+https://huggingface.co/Eugeoter/noob-sdxl-controlnet-depth/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	noob-sdxl-controlnet-depth.safetensors	2502139136
+https://huggingface.co/Eugeoter/noob-sdxl-controlnet-lineart_anime/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	noob-sdxl-controlnet-lineart_anime.safetensors	2502139136
+https://huggingface.co/Eugeoter/noob-sdxl-controlnet-manga_line/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	noob-sdxl-controlnet-manga_line.safetensors	2502139136
+https://huggingface.co/Eugeoter/noob-sdxl-controlnet-scribble_pidinet/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	noob-sdxl-controlnet-scribble_pidinet.safetensors	2502139136
+https://huggingface.co/xinsir/controlnet-union-sdxl-1.0/resolve/main/diffusion_pytorch_model_promax.safetensors	controlnet	xinsir-controlnet-union-sdxl-promax.safetensors	2513342408
+https://huggingface.co/2vXpSwA7/iroiro-lora/resolve/main/test_controlnet2/CN-anytest_v4-marged.safetensors	controlnet	CN-anytest_v4-marged.safetensors	2502139104
+https://huggingface.co/TencentARC/t2i-adapter-sketch-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	TencentARC__t2i-adapter-sketch-sdxl-10__diffusion_pytorch_model.fp16.safetensors	158060440
+https://huggingface.co/TencentARC/t2i-adapter-canny-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	TencentARC__t2i-adapter-canny-sdxl-10__diffusion_pytorch_model.fp16.safetensors	158060440
+https://huggingface.co/TencentARC/t2i-adapter-depth-midas-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	TencentARC__t2i-adapter-depth-midas-sdxl-10__diffusion_pytorch_model.fp16.safetensors	158060440
+https://huggingface.co/TencentARC/t2i-adapter-openpose-sdxl-1.0/resolve/main/diffusion_pytorch_model.safetensors	controlnet	TencentARC__t2i-adapter-openpose-sdxl-10__diffusion_pytorch_model.safetensors	316116784
+
+# --- comfyui_controlnet_aux preprocessor weights (ckpts/<repo>/<file>, exactly where custom_hf_download looks) ---
+https://huggingface.co/lllyasviel/Annotators/resolve/main/sk_model.pth	controlnet_aux_ckpts/lllyasviel/Annotators	sk_model.pth	17173511
+https://huggingface.co/lllyasviel/Annotators/resolve/main/sk_model2.pth	controlnet_aux_ckpts/lllyasviel/Annotators	sk_model2.pth	17173511
+https://huggingface.co/lllyasviel/Annotators/resolve/main/ControlNetHED.pth	controlnet_aux_ckpts/lllyasviel/Annotators	ControlNetHED.pth	29444406
+https://huggingface.co/lllyasviel/Annotators/resolve/main/table5_pidinet.pth	controlnet_aux_ckpts/lllyasviel/Annotators	table5_pidinet.pth	2871148
+https://huggingface.co/depth-anything/Depth-Anything-V2-Large/resolve/main/depth_anything_v2_vitl.pth	controlnet_aux_ckpts/depth-anything/Depth-Anything-V2-Large	depth_anything_v2_vitl.pth	1341395338
+https://huggingface.co/yzd-v/DWPose/resolve/main/yolox_l.onnx	controlnet_aux_ckpts/yzd-v/DWPose	yolox_l.onnx	216746733
+https://huggingface.co/yzd-v/DWPose/resolve/main/dw-ll_ucoco_384.onnx	controlnet_aux_ckpts/yzd-v/DWPose	dw-ll_ucoco_384.onnx	134399116
+https://huggingface.co/hr16/DWPose-TorchScript-BatchSize5/resolve/main/dw-ll_ucoco_384_bs5.torchscript.pt	controlnet_aux_ckpts/hr16/DWPose-TorchScript-BatchSize5	dw-ll_ucoco_384_bs5.torchscript.pt	135059124
+
+# --- Impact-Pack / Impact-Subpack detectors + SAM ---
+https://huggingface.co/Bingsu/adetailer/resolve/main/face_yolov8m.pt	ultralytics/bbox	face_yolov8m.pt	52026019
+https://huggingface.co/Bingsu/adetailer/resolve/main/hand_yolov8n.pt	ultralytics/bbox	hand_yolov8n.pt	6237883
+https://huggingface.co/Bingsu/adetailer/resolve/main/person_yolov8m-seg.pt	ultralytics/segm	person_yolov8m-seg.pt	54827683
+https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth	sams	sam_vit_b_01ec64.pth	375042383
+
+# --- IPAdapter (cubiq) ---
+https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors	ipadapter	ip-adapter-plus_sdxl_vit-h.safetensors	847517512
+https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter_sdxl_vit-h.safetensors	ipadapter	ip-adapter_sdxl_vit-h.safetensors	698391064
+https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors	clip_vision	CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors	2528373448
+
+# --- WD14 tagger (the pack's models/ dir is symlinked to models/wd14_tagger by start.sh) ---
+https://huggingface.co/SmilingWolf/wd-v1-4-moat-tagger-v2/resolve/main/model.onnx	wd14_tagger	wd-v1-4-moat-tagger-v2.onnx	326197340
+https://huggingface.co/SmilingWolf/wd-v1-4-moat-tagger-v2/resolve/main/selected_tags.csv	wd14_tagger	wd-v1-4-moat-tagger-v2.csv	253906
+https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3/resolve/main/model.onnx	wd14_tagger	wd-eva02-large-tagger-v3.onnx	1260435999
+https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3/resolve/main/selected_tags.csv	wd14_tagger	wd-eva02-large-tagger-v3.csv	308468
+
+# --- Upscalers (2x-AnimeJaNai has no stable HF home; skipped) ---
+https://huggingface.co/Kim2091/AnimeSharp/resolve/main/4x-AnimeSharp.pth	upscale_models	4x-AnimeSharp.pth	67010245

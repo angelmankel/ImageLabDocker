@@ -1,0 +1,9 @@
+{
+  "name": "imagelab-docker-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Dev tooling for scripts/ only. Not part of the image.",
+  "devDependencies": {
+    "puppeteer-core": "25.10.0"
+  }
+}

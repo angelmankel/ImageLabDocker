@@ -1,0 +1,73 @@
+worker_processes 1;
+daemon off;
+error_log /dev/stderr warn;
+pid /tmp/nginx.pid;
+events { worker_connections 256; }
+http {
+  include       /etc/nginx/mime.types;
+  default_type  application/octet-stream;
+  access_log /dev/stdout;
+  client_body_temp_path /tmp/nginx-body;
+  proxy_temp_path /tmp/nginx-proxy;
+  fastcgi_temp_path /tmp/nginx-fastcgi;
+  uwsgi_temp_path /tmp/nginx-uwsgi;
+  scgi_temp_path /tmp/nginx-scgi;
+  client_max_body_size 0;
+  map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+  server {
+    listen 0.0.0.0:${PROXY_PORT};
+    auth_basic "imagelab";
+    auth_basic_user_file /tmp/htpasswd;
+    # The live app on the volume, on 127.0.0.1 only: no extra pod port, and the basic auth above already covers it.
+    location /pod/app {
+      proxy_pass http://127.0.0.1:${APP_PORT};
+      proxy_http_version 1.1;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_read_timeout 3600s;
+      proxy_buffering off;
+    }
+    # ComfyUI's own static bundle. It is served with `Cache-Control: no-store`, which forbids the
+    # browser from keeping any of it — so every visit re-downloads the whole frontend, measured at
+    # 14.7 MB over 119 requests. Over a remote link that is the entire reason opening ComfyUI
+    # "takes forever". The filenames are content-hashed (index-vtow2bzT.js), so a changed file is
+    # a changed URL and there is nothing to go stale. Only the hashed bundle is touched: the HTML
+    # at / and every /api/ route keep ComfyUI's own headers, or a stale index would pin the app to
+    # an old build.
+    location /assets/ {
+      proxy_pass http://127.0.0.1:${COMFY_PORT};
+      proxy_http_version 1.1;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_hide_header Cache-Control;
+      proxy_hide_header Pragma;
+      add_header Cache-Control "public, max-age=31536000, immutable" always;
+    }
+
+    # ImageLab, straight off the volume. Same origin as ComfyUI, so its fetches and its websocket carry the
+    # basic auth the browser already has, and a deep link still lands on index.html.
+    location /lab/ {
+      alias /workspace/imagelab-app/lab/;
+      try_files $uri $uri/ /lab/index.html;
+    }
+    location = /lab { return 301 /lab/; }
+    location /pod/logs/ {
+      alias /workspace/imagelab-logs/;
+      autoindex on;
+      default_type text/plain;
+    }
+    location / {
+      proxy_pass http://127.0.0.1:${COMFY_PORT};
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_read_timeout 3600s;
+      proxy_send_timeout 3600s;
+      proxy_buffering off;
+      proxy_request_buffering off;
+    }
+  }
+}
