@@ -17,11 +17,22 @@ ENVFILE="${IMAGELAB_ENV:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null
 set -a; . "$ENVFILE"; set +a
 AUTH="${COMFY_LOCAL_USER}:${COMFY_LOCAL_TOKEN}"
 
+# PUT one file, retrying while the pod app is down. Pushing main.py makes live.py restart the app,
+# and the uploads right behind it land in that second-long gap as a 502 unless they wait it out.
+put() {  # put <file> <path under the app>
+  local code i
+  for i in 1 2 3 4 5 6; do
+    code=$(curl -sS -o /dev/null -w '%{http_code}' -u "$AUTH" -X PUT \
+      --data-binary "@$1" "${BASE}/pod/app/api/files?path=$(printf %s "$2" | jq -sRr @uri)")
+    case "$code" in 502|503|504|000) sleep 1 ;; *) break ;; esac
+  done
+  echo "$code"
+}
+
 ok=0; fail=0
 while IFS= read -r -d '' f; do
   rel="${f#"$ROOT"/app/}"
-  code=$(curl -sS -o /dev/null -w '%{http_code}' -u "$AUTH" -X PUT \
-    --data-binary "@$f" "${BASE}/pod/app/api/files?path=$(printf %s "$rel" | jq -sRr @uri)")
+  code=$(put "$f" "$rel")
   if [ "$code" = "200" ]; then
     ok=$((ok+1)); printf '  ok   %s\n' "$rel"
   else
@@ -34,8 +45,7 @@ done < <(find "$ROOT/app" -type f -not -path '*/__pycache__/*' -print0)
 if [ -n "${WEB:-}" ] && [ -d "$WEB/dist" ]; then
   while IFS= read -r -d '' f; do
     rel="lab/${f#"$WEB"/dist/}"
-    code=$(curl -sS -o /dev/null -w '%{http_code}' -u "$AUTH" -X PUT \
-      --data-binary "@$f" "${BASE}/pod/app/api/files?path=$(printf %s "$rel" | jq -sRr @uri)")
+    code=$(put "$f" "$rel")
     if [ "$code" = "200" ]; then ok=$((ok+1)); printf '  ok   %s\n' "$rel"
     else fail=$((fail+1)); printf '  FAIL %s (HTTP %s)\n' "$rel" "$code"; fi
   done < <(find "$WEB/dist" -type f -print0)
