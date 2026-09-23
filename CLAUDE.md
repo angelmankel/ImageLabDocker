@@ -188,8 +188,7 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
 - **No pod is running.** `p39jg1z8q1tgff` (A100 SXM, US) was terminated on 09-23 after its
   images were pulled to `/mnt/games/images/runpod/09-23-2026/` (147 files, 18 favorites) and its
   workflows were pulled (unchanged).
-- **ImageLab `main` is ahead of the image's pin** (`96c57df`: v1 UI, presets, clip skip). A new pod
-  serves the pinned build until `scripts/push.sh` runs or the `Dockerfile` pin moves.
+- **The image pins ImageLab `96c57df`** (v1 UI, prompt presets, snippet library, clip skip).
 - **The image** is `ghcr.io/angelmankel/imagelab-pod:latest`, public, built by Actions from `main`.
   It carries ImageLab and ImageLabCore at the pins in the `Dockerfile` and the five files in
   `workflows/`.
