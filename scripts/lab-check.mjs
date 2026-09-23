@@ -47,7 +47,7 @@ const seen = await page.evaluate(() => ({
 }));
 console.log("URL:", url);
 console.log("#root children:", seen.children, seen.children > 0 ? "(rendered)" : "(WHITE SCREEN)");
-console.log("connected:", /\bConnected\b/.test(seen.text) ? "yes" : `no — ${JSON.stringify(seen.text.slice(0, 120))}`);
+console.log("connected:", /\b(?:Connected|Ready)\b/.test(seen.text) ? "yes" : `no — ${JSON.stringify(seen.text.slice(0, 120))}`);
 console.log("--- console ---");
 console.log(msgs.slice(0, 40).join("\n") || "(silent)");
 if (shot) await page.screenshot({ path: shot });

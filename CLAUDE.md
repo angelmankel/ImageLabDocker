@@ -201,6 +201,12 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
   and rehashes files when size/mtime changes. ImageLab polls hashes every 10s and retries
   metadata after 30s; cached successes expire after a day, empty galleries after 5min,
   misses after an hour. Verified all six checkpoints resolve with images on this pod.
+- **Generation workspace:** ImageLab now has one collapsible left panel, inline saved prompt
+  presets, ordered refinement/upscale/resize/background-removal passes, a New seed action,
+  and a live sampler progress bar that clears on completion or error. Background removal uses
+  BiRefNet_toonout with explicit widget defaults. A complete four-pass test rendered on the A100;
+  desktop/mobile checks and the frontend regression tests passed. This update needed only a
+  frontend push, with no ComfyUI restart.
 - **Open, not decided:** ImageLab still ships two console-only self-tests
   (`__exerciseCanvasStorage`, `__exerciseCanvasLayers`) that are attached in production builds;
   Donny was asked whether to delete them or make them dev-only and has not said.
