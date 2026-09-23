@@ -185,8 +185,11 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
 
 ## Where this stands (2026-09-22)
 
-- **No pod is running.** RunPod spend is zero. The last images pulled are in
-  `/mnt/games/images/runpod/09-21-2026/` (33 files).
+- **A pod is running:** `p39jg1z8q1tgff`, A100 SXM, US, $1.59/h, at
+  `195.26.233.76:43499`. Started by Donny. ImageLab and ImageLabCore were hot-pushed
+  with the metadata refresh fix; only ComfyUI restarted, not the pod. No generated
+  images were present at the pre-restart pull on 09-22. The last nonempty image pull
+  is `/mnt/games/images/runpod/09-21-2026/` (33 files).
 - **The image** is `ghcr.io/angelmankel/imagelab-pod:latest`, public, built by Actions from `main`.
   It carries ImageLab and ImageLabCore at the pins in the `Dockerfile` and the five files in
   `workflows/`.
@@ -194,6 +197,10 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
   `diffusion_models`), Pony Realism v2.2, Mature Citron IL Unstable 3.0 and the Illustrious set.
 - **Workflows** (all five run; times measured on a B200): Anima Turbo (5 s), Anima Aesthetic (11 s),
   Pony Realism (8 s), Mature Citron IL, Illustrious Ultimate Upscale (49 s, 1664x2432).
+- **Model previews:** the node rescans after each pass (30s delay), skips aria2 partials,
+  and rehashes files when size/mtime changes. ImageLab polls hashes every 10s and retries
+  metadata after 30s; cached successes expire after a day, empty galleries after 5min,
+  misses after an hour. Verified all six checkpoints resolve with images on this pod.
 - **Open, not decided:** ImageLab still ships two console-only self-tests
   (`__exerciseCanvasStorage`, `__exerciseCanvasLayers`) that are attached in production builds;
   Donny was asked whether to delete them or make them dev-only and has not said.
