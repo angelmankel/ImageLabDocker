@@ -183,6 +183,26 @@ through `/prompt`. Anima is a diffusion model only: `UNETLoader` from `diffusion
 
 Stop/resume is how you pick up a new image. **Pull images and push repos before either.**
 
+## Where this stands (2026-09-22)
+
+- **No pod is running.** RunPod spend is zero. The last images pulled are in
+  `/mnt/games/images/runpod/09-21-2026/` (33 files).
+- **The image** is `ghcr.io/angelmankel/imagelab-pod:latest`, public, built by Actions from `main`.
+  It carries ImageLab and ImageLabCore at the pins in the `Dockerfile` and the five files in
+  `workflows/`.
+- **Models:** `models.txt` is 88 files / ~87 GB, including Anima (Turbo + Aesthetic, in
+  `diffusion_models`), Pony Realism v2.2, Mature Citron IL Unstable 3.0 and the Illustrious set.
+- **Workflows** (all five run; times measured on a B200): Anima Turbo (5 s), Anima Aesthetic (11 s),
+  Pony Realism (8 s), Mature Citron IL, Illustrious Ultimate Upscale (49 s, 1664x2432).
+- **Open, not decided:** ImageLab still ships two console-only self-tests
+  (`__exerciseCanvasStorage`, `__exerciseCanvasLayers`) that are attached in production builds;
+  Donny was asked whether to delete them or make them dev-only and has not said.
+- **Worth knowing:** the LAN ComfyUI boxes (`comfy.dev`, `comfy2.dev`) still run an older
+  ImageLabCore that answers `/imagelab/*`, not `/imagelab/api/*`, so ImageLab's model browser and
+  favorites are blind against them until they are updated.
+- A RunPod MCP server is configured for this project folder (`claude mcp` local scope), so a future
+  session may have RunPod tools instead of the GraphQL calls in this file.
+
 ## Facts that cost time — do not relearn them
 
 1. ComfyUI runs `steps × denoise`. "10 steps" typed literally runs two and does nothing.
@@ -201,14 +221,32 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
 9. **When Donny reports a mouse or input problem, ask whether it happens outside the app.** He
    works over Moonlight, whose absolute mouse mode strands the cursor at a screen edge;
    `Ctrl+Alt+Shift+M` fixes it and it is not a UI bug.
+10. **ImageLabCore's downloader is one connection, about 1 MB/s from Civitai.** A 7 GB checkpoint is
+    an hour. `download-models.sh` uses aria2 with eight connections and gets 3-7 MB/s for the same
+    file, which is why `models.txt` is the place to add a model that every pod should have. For a
+    one-off on a live pod, aria2 is installed: run it there rather than waiting on the API.
+11. **The ComfyUI editor adds a `control_after_generate` slot to any INT named `seed`**, declared in
+    `/object_info` or not (`UltimateSDUpscale` does not declare one). A saved workflow therefore has
+    an extra `"randomize"` in `widgets_values` after that seed. Anything reading widgets positionally
+    has to expect it or every widget after the seed is read one slot off.
+12. **A pod's basic auth is one user.** A browser or proxy that still sends an older name gets 401 on
+    every request, and the page hangs with no login box. `COMFY_AUTH_ALIASES` is the escape hatch.
 
 ## Verifying
 
 Donny tests; do not drive his mouse. Use the offscreen harness:
 
 ```sh
-node scripts/lab-check.mjs <url> [shot.png]   # loads a page, reports console + whether it rendered
+node scripts/lab-check.mjs <url> [shot.png]              # loads a page, reports console + whether it rendered
+node scripts/queue-workflow.mjs <ip:port> <file.json>    # runs a saved workflow the way ComfyUI would
 ```
 
-It needs `npm install` once in this repo (puppeteer-core) and a local Chromium. For anything graph-shaped,
-validate against `/object_info` rather than spending a render.
+Both need `npm install` once in this repo (puppeteer-core) and a local Chromium.
+
+`queue-workflow.mjs` is the way to check a workflow. A file in `workflows/` is an **editor** graph;
+`/prompt` wants an **API** graph. Rather than convert it by hand, the script loads the file into the
+pod's own ComfyUI frontend offscreen, lets `app.graphToPrompt()` convert it, posts that, and waits
+for the result. What it catches is what a person pressing Queue would hit.
+
+Check node inputs against `/object_info` before writing a graph. Renders are cheap; a wrong graph
+that looks right is not.

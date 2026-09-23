@@ -22,4 +22,5 @@ scripts/push-node.sh  <ip:port>   # ImageLabCore + in-place ComfyUI restart, ~15
 scripts/pull-images.sh <ip:port>  # every generation -> /mnt/games/images/runpod/MM-DD-YYYY/
 scripts/workflows.sh pull|push <ip:port>  # ComfyUI saved workflows <-> workflows/
 scripts/lab-check.mjs <url>       # load a page offscreen, report console + render
+scripts/queue-workflow.mjs <ip:port> <workflow.json>  # run a saved workflow as ComfyUI would
 ```
