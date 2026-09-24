@@ -185,7 +185,9 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
 
 ## Where this stands (2026-09-22)
 
-- **No pod is running.** `p39jg1z8q1tgff` (A100 SXM, US) was terminated on 09-23 after its
+- **A pod is running:** `69rxv7kei9cxtn`, A100 SXM, US-WA-1, $1.59/h, at `195.26.233.52:39516`.
+  Started by Donny on 09-24 from the new image (serves ImageLab `96c57df`, models complete).
+- `p39jg1z8q1tgff` (A100 SXM, US) was terminated on 09-23 after its
   images were pulled to `/mnt/games/images/runpod/09-23-2026/` (147 files, 18 favorites) and its
   workflows were pulled (unchanged).
 - **The image pins ImageLab `96c57df`** (v1 UI, prompt presets, snippet library, clip skip).
