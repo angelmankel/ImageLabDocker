@@ -185,13 +185,15 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
 
 ## Where this stands (2026-09-22)
 
-- **No pod is running.** `69rxv7kei9cxtn` (A100 SXM, US-WA-1) was terminated on 09-24 after its
+- **A pod is running:** `36zinlcas823hs`, A100 SXM, US-WA-1, $1.59/h, at `195.26.233.30:38814`.
+  Started by Donny on 09-26.
+- `69rxv7kei9cxtn` (A100 SXM, US-WA-1) was terminated on 09-24 after its
   88 images were pulled to `/mnt/games/images/runpod/09-24-2026/` and its workflows (unchanged).
   It never got ImageLabCore `329f992` pushed; the image carries it.
 - `p39jg1z8q1tgff` (A100 SXM, US) was terminated on 09-23 after its
   images were pulled to `/mnt/games/images/runpod/09-23-2026/` (147 files, 18 favorites) and its
   workflows were pulled (unchanged).
-- **The image pins ImageLab `73dac6e`** (v1 UI, presets, snippet library, clip skip, phone fixes).
+- **The image pins ImageLab `dcf1ccd`** (tabs, quick search, My models, embeddings, browser, loopback frames).
 - **The image** is `ghcr.io/angelmankel/imagelab-pod:latest`, public, built by Actions from `main`.
   It carries ImageLab and ImageLabCore at the pins in the `Dockerfile` and the five files in
   `workflows/`.
