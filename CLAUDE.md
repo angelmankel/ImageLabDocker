@@ -185,8 +185,9 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
 
 ## Where this stands (2026-09-22)
 
-- **A pod is running:** `36zinlcas823hs`, A100 SXM, US-WA-1, $1.59/h, at `195.26.233.30:38814`.
-  Started by Donny on 09-26.
+- **No pod is running.** `36zinlcas823hs` (A100 SXM, US-WA-1) was terminated on 09-26. On Donny's
+  explicit instruction its 168 images were deleted, NOT pulled (ComfyUI restart wiped temp/,
+  history cleared) — there is no local copy of that session's images.
 - `69rxv7kei9cxtn` (A100 SXM, US-WA-1) was terminated on 09-24 after its
   88 images were pulled to `/mnt/games/images/runpod/09-24-2026/` and its workflows (unchanged).
   It never got ImageLabCore `329f992` pushed; the image carries it.
