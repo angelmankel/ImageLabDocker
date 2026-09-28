@@ -28,6 +28,18 @@ document.
    you start one; stop it when it goes idle.
 4. **Every retry is a NEW project. Never overwrite a render.** The failures are the data.
 5. **Commit straight to `main`. No branches.**
+6. **Every change Donny asks for ships at once, without asking. Always.**
+   1. **Pod first.** As soon as the change works, push it to the pod Donny is using now, so Donny
+      sees it straight away. Find the pod with `list-pods` (use the running one; ask only if
+      there are several). Web changes: `npm run build` in ImageLab, then upload only `dist/` —
+      see *How to check and ship* in `../HANDOFF.md` (`push.sh` also pushes the pod
+      app's `main.py`, which restarts the app). ImageLabCore changes: `scripts/push-node.sh`.
+   2. **Then commit and push to GitHub**, every repo you touched. In ImageLab, commit the rebuilt
+      `dist/` together with `src/` — the image copies `dist/` and never builds it.
+   3. **Then move the pin** in this repo's `Dockerfile` (and the "image pins" line below) to the
+      new ImageLab / ImageLabCore commit, commit, push. That rebuilds the image, so the change
+      stays in every new pod.
+   Do not stop to ask "push it?". The answer is always yes.
 
 ## Credentials
 
