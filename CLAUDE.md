@@ -216,7 +216,7 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
   images were pulled to `/mnt/games/images/runpod/09-23-2026/` (147 files, 18 favorites) and its
   workflows were pulled (unchanged).
 - **The image pins ImageLabCore `dd16c50`** (diffusion models sorted out of checkpoints/, 8-connection downloads, Hugging Face URLs, model inspect).
-- **The image pins ImageLab `2852f4d`** (tabs, quick search, My models, embeddings, browser, loopback frames; CivitAI image meta fix; Clear all button; phone Settings; phone AI generator + selects; model types + quality-tag pills + BREAK; video previews play in browser, modal and fullscreen; no wheel seek on tiles; single-pick model picker (Shift / long press for several); Anima family; SD 1.5; Flux, Z-Image Turbo, Qwen-Image families; Video view (Wan 2.2)).
+- **The image pins ImageLab `fb1c3f7`** (tabs, quick search, My models, embeddings, browser, loopback frames; CivitAI image meta fix; Clear all button; phone Settings; phone AI generator + selects; model types + quality-tag pills + BREAK; video previews play in browser, modal and fullscreen; no wheel seek on tiles; single-pick model picker (Shift / long press for several); Anima family; SD 1.5; Flux, Z-Image Turbo, Qwen-Image families; Video view (Wan 2.2)).
 - **The image** is `ghcr.io/angelmankel/imagelab-pod:latest`, public, built by Actions from `main`.
   It carries ImageLab and ImageLabCore at the pins in the `Dockerfile` and the files in
   `workflows/` (five tested, five reference ones not yet rendered).
