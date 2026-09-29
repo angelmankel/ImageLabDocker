@@ -206,7 +206,10 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
 
 ## Where this stands (2026-09-22)
 
-- **No pod is running.** `36zinlcas823hs` (A100 SXM, US-WA-1) was terminated on 09-26. On Donny's
+- **No pod is running.** `9pd24b4wivsx8x` (A100 SXM, US-KS-2) was terminated on 09-29 after its 234
+  images/videos were pulled to `/mnt/games/images/runpod/09-29-2026/` and its 14 workflows (unchanged). The Wan /
+  Flux / Z-Image / Qwen models and helper files fetched on it are NOT in models.txt (see HANDOFF).
+- Before that: `36zinlcas823hs` (A100 SXM, US-WA-1) was terminated on 09-26. On Donny's
   explicit instruction its 168 images were deleted, NOT pulled (ComfyUI restart wiped temp/,
   history cleared) — there is no local copy of that session's images.
 - `69rxv7kei9cxtn` (A100 SXM, US-WA-1) was terminated on 09-24 after its
