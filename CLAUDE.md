@@ -179,7 +179,16 @@ does not trigger an image build (`workflows/` is not in the build's `paths:`), s
 edit reaches a running pod, and the next image build picks it up.
 
 Before saving a workflow, check every node and widget against `/object_info` and run it once
-through `/prompt`. Anima is a diffusion model only: `UNETLoader` from `diffusion_models`, with
+through `/prompt`.
+
+**Reference workflows** for models that are not in `models.txt` yet — Wan 2.2 T2V / I2V (A14B),
+Flux Dev, Z-Image Turbo, Qwen Image — are written by `scripts/reference-workflows.mjs <ip:port>`
+from API graphs, through ImageLab's own converter (`workflowGraph.ts`). It checks each file round
+trips and that `/prompt` refuses it only for the missing model files; each file's note lists the
+files and where to get them. They have not rendered yet. Wan saves an animated WebP: SaveVideo's
+format/codec are a `COMFY_DYNAMICCOMBO_V3` input that ImageLab's converter cannot read yet.
+
+Anima is a diffusion model only: `UNETLoader` from `diffusion_models`, with
 `CLIPLoader` (`qwen_3_06b_base`, type `stable_diffusion`) and `VAELoader` (`qwen_image_vae`).
 
 ## Stopping, resuming, terminating
@@ -206,10 +215,10 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
 - `p39jg1z8q1tgff` (A100 SXM, US) was terminated on 09-23 after its
   images were pulled to `/mnt/games/images/runpod/09-23-2026/` (147 files, 18 favorites) and its
   workflows were pulled (unchanged).
-- **The image pins ImageLab `0014041`** (tabs, quick search, My models, embeddings, browser, loopback frames; CivitAI image meta fix; Clear all button; phone Settings; phone AI generator + selects; model types + quality-tag pills + BREAK; video previews play in browser, modal and fullscreen; no wheel seek on tiles; single-pick model picker (Shift / long press for several); Anima family; SD 1.5).
+- **The image pins ImageLab `2c49cd4`** (tabs, quick search, My models, embeddings, browser, loopback frames; CivitAI image meta fix; Clear all button; phone Settings; phone AI generator + selects; model types + quality-tag pills + BREAK; video previews play in browser, modal and fullscreen; no wheel seek on tiles; single-pick model picker (Shift / long press for several); Anima family; SD 1.5; Flux, Z-Image Turbo, Qwen-Image families).
 - **The image** is `ghcr.io/angelmankel/imagelab-pod:latest`, public, built by Actions from `main`.
-  It carries ImageLab and ImageLabCore at the pins in the `Dockerfile` and the five files in
-  `workflows/`.
+  It carries ImageLab and ImageLabCore at the pins in the `Dockerfile` and the files in
+  `workflows/` (five tested, five reference ones not yet rendered).
 - **Models:** `models.txt` is 88 files / ~87 GB, including Anima (Turbo + Aesthetic, in
   `diffusion_models`), Pony Realism v2.2, Mature Citron IL Unstable 3.0 and the Illustrious set.
 - **Workflows** (all five run; times measured on a B200): Anima Turbo (5 s), Anima Aesthetic (11 s),
