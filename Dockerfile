@@ -55,7 +55,8 @@ RUN touch /opt/ComfyUI/custom_nodes/skip_download_model \
     && install-node https://github.com/storyicon/comfyui_segment_anything      ab6395596399d5048639cdab7e44ec9fae857a93 comfyui_segment_anything \
     && install-node https://github.com/Suzie1/ComfyUI_Comfyroll_CustomNodes    d78b780ae43fcf8c6b7c6505e6ffb4584281ceca ComfyUI_Comfyroll_CustomNodes \
     && install-node https://github.com/WASasquatch/was-node-suite-comfyui      c5ff955029829755807a52ac5bc5ebc8410cde6c was-node-suite-comfyui \
-    && install-node https://github.com/yolain/ComfyUI-Easy-Use                 271685698b0935c5b0ecca86a58c3817931cd205 ComfyUI-Easy-Use
+    && install-node https://github.com/yolain/ComfyUI-Easy-Use                 271685698b0935c5b0ecca86a58c3817931cd205 ComfyUI-Easy-Use \
+    && install-node https://github.com/city96/ComfyUI-GGUF                     6ea2651e7df66d7585f6ffee804b20e92fb38b8a ComfyUI-GGUF
 
 # Re-assert the CUDA torch build and the GPU onnxruntime (several packs pull the CPU 'onnxruntime',
 # which shadows onnxruntime-gpu's providers), then prove CUDA 12.8 + the GPU provider are what's left.
@@ -70,7 +71,7 @@ RUN pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
 # This is what answers /imagelab/api/hashes, /imagelab/api/downloads and /imagelab/api/favorites. Without it
 # the app cannot ask a server what models it has, and the model browser shows nothing. Pinned like
 # every other pack above.
-RUN install-node https://github.com/angelmankel/ImageLabCore dd16c5023297ebbca4dbf981fced6a2390f2a4c3 ImageLabCore
+RUN install-node https://github.com/angelmankel/ImageLabCore dd6529226c880f00447f5953c470cb610116bd50 ImageLabCore
 
 # ---- Runtime files --------------------------------------------------------------
 COPY models.txt download-models.sh start.sh nginx.conf.template live.py /opt/imagelab/
@@ -81,8 +82,8 @@ COPY workflows /opt/imagelab/workflows
 # The built dist/ is cloned at a pin. dist/ is committed there precisely so this needs no npm in the image build. What lands here is
 # only the seed: scripts/push.sh replaces it on a running pod without a rebuild.
 RUN git clone --depth 1 https://github.com/angelmankel/ImageLab /tmp/imagelab \
-    && git -C /tmp/imagelab fetch --depth 1 origin b17874fc00ed852f391b838ab2bef87bd20eb8db \
-    && git -C /tmp/imagelab checkout --quiet b17874fc00ed852f391b838ab2bef87bd20eb8db \
+    && git -C /tmp/imagelab fetch --depth 1 origin a8de3e6f6c182138e382ab29e69acce43164f67a \
+    && git -C /tmp/imagelab checkout --quiet a8de3e6f6c182138e382ab29e69acce43164f67a \
     && mkdir -p /opt/imagelab/app/lab \
     && cp -a /tmp/imagelab/dist/. /opt/imagelab/app/lab/ \
     && rm -rf /tmp/imagelab

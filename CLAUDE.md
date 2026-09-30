@@ -55,7 +55,7 @@ cd ~/Github/ImageLabProject && set -a && . ./.env && set +a
 
 The GPU changes with the job. What does not change: **secure cloud, US**. Community is cheaper and
 not worth it — a community RTX 5090 was still pulling the 8.3 GB image fifteen minutes in at about
-10 MB/s, while a secure one served in eighty seconds. First boot downloads 62 GB of models, so the
+10 MB/s, while a secure one served in eighty seconds. First boot downloads ~159 GB of models, so the
 uplink is the whole game.
 
 List what is available and what it costs:
@@ -77,7 +77,7 @@ US datacentre. Deploying is the only real test, and a failed deploy costs nothin
 curl -s https://api.runpod.io/graphql -H "Authorization: Bearer $RUNPOD_API_KEY" \
   -H 'Content-Type: application/json' -d "{\"query\":\"mutation { podFindAndDeployOnDemand(input: {
     cloudType: SECURE, gpuCount: 1, countryCode: \\\"US\\\",
-    containerDiskInGb: 30, volumeInGb: 100, volumeMountPath: \\\"/workspace\\\",
+    containerDiskInGb: 30, volumeInGb: 512, volumeMountPath: \\\"/workspace\\\",
     minVcpuCount: 4, minMemoryInGb: 16,
     gpuTypeId: \\\"NVIDIA GeForce RTX 5090\\\",
     name: \\\"imagelab\\\", imageName: \\\"ghcr.io/angelmankel/imagelab-pod:latest\\\",
@@ -88,13 +88,13 @@ curl -s https://api.runpod.io/graphql -H "Authorization: Bearer $RUNPOD_API_KEY"
   }) { id costPerHr machine { gpuDisplayName location } } }\"}" | jq -c .
 ```
 
-- `volumeInGb: 100` is a **pod-local** volume: made with the pod, gone with it, no standing
+- `volumeInGb: 512` is a **pod-local** volume (models.txt alone is ~159 GB since Wan joined it; the template has 512 too, since 09-29): made with the pod, gone with it, no standing
   storage bill, and it survives a *stop*. A network volume bills between sessions.
 - **Never pass `volumeInGb` for a B200 or B300.** Blackwell datacentre nodes have no local disk and
   every attempt returns "no instances available" until it is dropped. An RTX 5090 is Blackwell too
   but takes a volume fine.
 - **Without a volume, `/workspace` is the container disk**, so a B200/B300 needs
-  `containerDiskInGb: 150` or the ~87 GB of models do not fit. Deploying the template on a B200
+  `containerDiskInGb: 250` or the ~159 GB of models do not fit. Deploying the template on a B200
   silently drops its volume and leaves 30 GB: raise the container disk (Edit Pod, or `podEditJob`).
 - `COMFY_AUTH_USER` / `COMFY_AUTH_TOKEN` must be `COMFY_LOCAL_USER` / `COMFY_LOCAL_TOKEN` so the saved
   Traefik login keeps working. The image defaults the user to `imagelab`.
@@ -138,7 +138,7 @@ ImageLab calls only ComfyUI and `/imagelab/api/*`, never `/pod/app`, so the pod 
 without an ImageLab build. Models are installed from ImageLab's model browser, which goes through
 `/imagelab/api/downloads`.
 
-First boot fetches **62.2 GB across 88 files** from `models.txt`. Civitai answers 403 to some
+First boot fetches **~159 GB** from `models.txt` (Wan video is ~73 GB of it). Civitai answers 403 to some
 aria2 requests — normal, the curl fallback picks them up. Watch `models-complete`.
 
 ## Changing code on a running pod
@@ -188,6 +188,9 @@ trips and that `/prompt` refuses it only for the missing model files; each file'
 files and where to get them. They have not rendered yet. Wan saves an animated WebP: SaveVideo's
 format/codec are a `COMFY_DYNAMICCOMBO_V3` input that ImageLab's converter cannot read yet.
 
+**GGUF models** (quantized, e.g. CivitAI Wan mixes) load through ComfyUI-GGUF's `UnetLoaderGGUF` (pinned in the
+Dockerfile). ImageLabCore saves them as `.gguf` in `diffusion_models`; ImageLab picks the loader by extension.
+
 Anima is a diffusion model only: `UNETLoader` from `diffusion_models`, with
 `CLIPLoader` (`qwen_3_06b_base`, type `stable_diffusion`) and `VAELoader` (`qwen_image_vae`).
 
@@ -218,12 +221,13 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
 - `p39jg1z8q1tgff` (A100 SXM, US) was terminated on 09-23 after its
   images were pulled to `/mnt/games/images/runpod/09-23-2026/` (147 files, 18 favorites) and its
   workflows were pulled (unchanged).
-- **The image pins ImageLabCore `dd16c50`** (diffusion models sorted out of checkpoints/, 8-connection downloads, Hugging Face URLs, model inspect).
-- **The image pins ImageLab `b17874f`** (tabs, quick search, My models, embeddings, browser, loopback frames; CivitAI image meta fix; Clear all button; phone Settings; phone AI generator + selects; model types + quality-tag pills + BREAK; video previews play in browser, modal and fullscreen; no wheel seek on tiles; single-pick model picker (Shift / long press for several); Anima family; SD 1.5; Flux, Z-Image Turbo, Qwen-Image families; Video view (Wan 2.2)).
+- **The image pins ImageLabCore `dd65292`** (diffusion models sorted out of checkpoints/, 8-connection downloads, Hugging Face URLs, model inspect; GGUF files keep `.gguf` and go to diffusion_models).
+- **The image pins ImageLab `a8de3e6`** (tabs, quick search, My models, embeddings, browser, loopback frames; CivitAI image meta fix; Clear all button; phone Settings; phone AI generator + selects; model types + quality-tag pills + BREAK; video previews play in browser, modal and fullscreen; no wheel seek on tiles; single-pick model picker (Shift / long press for several); Anima family; SD 1.5; Flux, Z-Image Turbo, Qwen-Image families; Video view (Wan 2.2); GGUF Wan models via UnetLoaderGGUF, no second speed LoRA on mixes that have one inside; Loopback dual sliders).
 - **The image** is `ghcr.io/angelmankel/imagelab-pod:latest`, public, built by Actions from `main`.
   It carries ImageLab and ImageLabCore at the pins in the `Dockerfile` and the files in
   `workflows/` (five tested, five reference ones not yet rendered).
-- **Models:** `models.txt` is 88 files / ~87 GB, including Anima (Turbo + Aesthetic, in
+- **Models:** `models.txt` is ~159 GB. Wan 2.2 video was added 09-29 (~73 GB: SmoothMix T2V + I2V high/low, umt5, wan_2.1_vae,
+  lightx2v 4-step LoRAs, 3 fast upscalers). Before that it was ~87 GB, including Anima (Turbo + Aesthetic, in
   `diffusion_models`), Pony Realism v2.2, Mature Citron IL Unstable 3.0 and the Illustrious set.
 - **Workflows** (all five run; times measured on a B200): Anima Turbo (5 s), Anima Aesthetic (11 s),
   Pony Realism (8 s), Mature Citron IL, Illustrious Ultimate Upscale (49 s, 1664x2432).

@@ -96,3 +96,23 @@ https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3/resolve/main/selecte
 
 # --- Upscalers (2x-AnimeJaNai has no stable HF home; skipped) ---
 https://huggingface.co/Kim2091/AnimeSharp/resolve/main/4x-AnimeSharp.pth	upscale_models	4x-AnimeSharp.pth	67010245
+
+# --- Wan 2.2 video (ImageLab's Video view; workflows/Wan 2.2 *.json) ---
+# SmoothMix Wan 2.2 14B (civitai model 1995784), T2V v4.0 + I2V v2.0, high + low noise experts. CivitAI calls them
+# "Checkpoint", but they are the diffusion model only: diffusion_models, for UNETLoader. The T2V ones have the lightx2v
+# speed LoRA merged in (the Video view's Fast then adds none); the I2V ones do not.
+civitai:3138094	diffusion_models	smoothMixWan2214BI2V_t2vHighV40.safetensors	16065804446
+civitai:3138091	diffusion_models	smoothMixWan2214BI2V_t2vLowV40.safetensors	16065804446
+civitai:2513182	diffusion_models	smoothMixWan2214BI2V_i2vV20High.safetensors	14550099704
+civitai:2513186	diffusion_models	smoothMixWan2214BI2V_i2vV20Low.safetensors	14550099768
+https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors	text_encoders	umt5_xxl_fp8_e4m3fn_scaled.safetensors	6735906897
+https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors	vae	wan_2.1_vae.safetensors	253815318
+# lightx2v 4-step LoRAs: the Video view's Fast mode (4 steps, CFG 1).
+https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors	loras	wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors	1226977424
+https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors	loras	wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors	1226977424
+https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors	loras	wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors	1226977424
+https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors	loras	wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors	1226977424
+# Fast video upscalers (the Video view's Upscale option). A100, 81 frames 832x480 x2: Nomos 12 s, AnimeSharpV4 20 s, ClearReality 33 s.
+https://github.com/Phhofm/models/releases/download/2xNomosUni_span_multijpg/2xNomosUni_span_multijpg.safetensors	upscale_models	2xNomosUni_span_multijpg.safetensors	4461056
+https://huggingface.co/Kim2091/2x-AnimeSharpV4/resolve/main/2x-AnimeSharpV4_Fast_RCAN_PU.safetensors	upscale_models	2x-AnimeSharpV4_Fast_RCAN_PU.safetensors	31359158
+https://huggingface.co/Kim2091/ClearRealityV1/resolve/main/4x-ClearRealityV1.safetensors	upscale_models	4x-ClearRealityV1.safetensors	4492232
