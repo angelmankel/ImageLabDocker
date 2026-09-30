@@ -209,7 +209,10 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
 
 ## Where this stands (2026-09-22)
 
-- **No pod is running.** `9pd24b4wivsx8x` (A100 SXM, US-KS-2) was terminated on 09-29 after its 234
+- **No pod is running.** `7bvm59dppz3gxk` (B200, US-CA-2, $6.79/h, started by Donny) was terminated on 09-30 after its
+  images were pulled to `/mnt/games/images/runpod/09-29-2026/` and `09-30-2026/` and its 14 workflows (unchanged).
+  Wan (SmoothMix) and a GGUF Wan mix were tested on it; ComfyUI-GGUF went on live through ComfyUI-Manager.
+- `9pd24b4wivsx8x` (A100 SXM, US-KS-2) was terminated on 09-29 after its 234
   images/videos were pulled to `/mnt/games/images/runpod/09-29-2026/` and its 14 workflows (unchanged). The Wan /
   Flux / Z-Image / Qwen models and helper files fetched on it are NOT in models.txt (see HANDOFF).
 - Before that: `36zinlcas823hs` (A100 SXM, US-WA-1) was terminated on 09-26. On Donny's
