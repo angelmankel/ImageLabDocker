@@ -46,9 +46,13 @@ http {
 
     # ImageLab, straight off the volume. Same origin as ComfyUI, so its fetches and its websocket carry the
     # basic auth the browser already has, and a deep link still lands on index.html.
+    # `no-cache` = re-check every time (a cheap 304 when unchanged). Without it the browser guesses a
+    # freshness from Last-Modified — hours for a page baked into the image days ago — and an installed
+    # PWA kept showing the old build after push.sh. Hashed assets are cached by the service worker.
     location /imagelab/ {
       alias /workspace/imagelab-app/lab/;
       try_files $uri $uri/ /imagelab/index.html;
+      add_header Cache-Control "no-cache" always;
     }
     location = /imagelab { return 301 /imagelab/; }
     # ImageLabCore's API is a ComfyUI route. The longer prefix wins over /imagelab/ above.
