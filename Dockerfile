@@ -71,7 +71,7 @@ RUN pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
 # This is what answers /imagelab/api/hashes, /imagelab/api/downloads and /imagelab/api/favorites. Without it
 # the app cannot ask a server what models it has, and the model browser shows nothing. Pinned like
 # every other pack above.
-RUN install-node https://github.com/angelmankel/ImageLabCore dd6529226c880f00447f5953c470cb610116bd50 ImageLabCore
+RUN install-node https://github.com/angelmankel/ImageLabCore c0299138fabc5f72279443b8542f6e54716ec842 ImageLabCore
 
 # ---- Runtime files --------------------------------------------------------------
 COPY models.txt download-models.sh start.sh nginx.conf.template live.py /opt/imagelab/
@@ -82,8 +82,8 @@ COPY workflows /opt/imagelab/workflows
 # The built dist/ is cloned at a pin. dist/ is committed there precisely so this needs no npm in the image build. What lands here is
 # only the seed: scripts/push.sh replaces it on a running pod without a rebuild.
 RUN git clone --depth 1 https://github.com/angelmankel/ImageLab /tmp/imagelab \
-    && git -C /tmp/imagelab fetch --depth 1 origin 66d630f9e43e9f00c89f51dadd6d1218c67328b9 \
-    && git -C /tmp/imagelab checkout --quiet 66d630f9e43e9f00c89f51dadd6d1218c67328b9 \
+    && git -C /tmp/imagelab fetch --depth 1 origin 0170a3299092b019506a400028221986f1239659 \
+    && git -C /tmp/imagelab checkout --quiet 0170a3299092b019506a400028221986f1239659 \
     && mkdir -p /opt/imagelab/app/lab \
     && cp -a /tmp/imagelab/dist/. /opt/imagelab/app/lab/ \
     && rm -rf /tmp/imagelab
