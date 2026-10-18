@@ -209,7 +209,10 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
 
 ## Where this stands (2026-09-22)
 
-- **No pod is running.** `7bvm59dppz3gxk` (B200, US-CA-2, $6.79/h, started by Donny) was terminated on 09-30 after its
+- **No pod is running.** `ydq68v43bc6z23` (H200, US-NC-1, $5.29/h, started by Donny) was terminated on 10-18 after its
+  107 images/videos were pulled to `/mnt/games/images/runpod/10-18-2026/` and its 14 workflows (unchanged). It ran
+  ImageLab `0170a32` + ImageLabCore `c029913` (Model Type dropdown flicker fix; download clears ComfyUI's folder cache).
+- `7bvm59dppz3gxk` (B200, US-CA-2, $6.79/h, started by Donny) was terminated on 09-30 after its
   images were pulled to `/mnt/games/images/runpod/09-29-2026/` and `09-30-2026/` and its 14 workflows (unchanged).
   Wan (SmoothMix) and a GGUF Wan mix were tested on it; ComfyUI-GGUF went on live through ComfyUI-Manager.
 - `9pd24b4wivsx8x` (A100 SXM, US-KS-2) was terminated on 09-29 after its 234
