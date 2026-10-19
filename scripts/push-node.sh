@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Push ImageLabCore to a running pod and restart ComfyUI in place.
+# Push ImageLabCore to a running pod and restart ComfyUI in place (both of them, when the pod runs
+# the second, video ComfyUI at /video-comfy/).
 #
 #   scripts/push-node.sh 1.2.3.4:10012
 #
@@ -35,17 +36,38 @@ done < <(find "$SRC" -name '*.py' -not -path '*/.git/*' -not -path '*/__pycache_
 echo "pushed $ok file(s), $fail failure(s)"
 [ "$fail" -eq 0 ] || exit 1
 
+# Is there a second, video ComfyUI? 502 when start.sh left it off (small GPU, COMFY_VIDEO=0) or it
+# is down. Asked before anything restarts.
+video=$(curl -s -o /dev/null -w '%{http_code}' -m 5 -u "$AUTH" "${BASE}/video-comfy/system_stats" || true)
+
 echo "restarting ComfyUI in place ..."
 # 502 is the expected answer: nginx sees ComfyUI vanish mid-request, and it is already re-exec'ing.
 curl -sS -o /dev/null -w '  /manager/reboot -> HTTP %{http_code}\n' -m 20 \
   -u "$AUTH" -X POST -H 'Content-Type: application/json' -d '{}' "${BASE}/manager/reboot" || true
 
-for i in $(seq 1 40); do
-  sleep 3
-  if [ "$(curl -s -o /dev/null -w '%{http_code}' -m 5 -u "$AUTH" "${BASE}/imagelab/api/hashes")" = "200" ]; then
-    echo "  ComfyUI back after ~$((i*3))s, /imagelab/api/hashes answering"
-    exit 0
-  fi
-done
-echo "  ComfyUI did not come back within 120s — check the pod log" >&2
-exit 1
+# wait_for <url> <label>: poll until it answers 200, up to 120s.
+wait_for() {
+  for i in $(seq 1 40); do
+    sleep 3
+    if [ "$(curl -s -o /dev/null -w '%{http_code}' -m 5 -u "$AUTH" "$1")" = "200" ]; then
+      echo "  $2 back after ~$((i*3))s"
+      return 0
+    fi
+  done
+  echo "  $2 did not come back within 120s — check the pod log" >&2
+  return 1
+}
+
+wait_for "${BASE}/imagelab/api/hashes" "ComfyUI (/imagelab/api/hashes)" || exit 1
+
+# The second ComfyUI (video, /video-comfy/) loads the same ImageLabCore from the volume, so it
+# restarts too. One at a time: both import every custom node, and several write config files then.
+if [ "$video" = "200" ]; then
+  echo "restarting the video ComfyUI in place ..."
+  curl -sS -o /dev/null -w '  /video-comfy/manager/reboot -> HTTP %{http_code}\n' -m 20 \
+    -u "$AUTH" -X POST -H 'Content-Type: application/json' -d '{}' "${BASE}/video-comfy/manager/reboot" || true
+  # favorites is the one ImageLabCore route the second ComfyUI serves itself (the rest go to the first).
+  wait_for "${BASE}/video-comfy/imagelab/api/favorites" "video ComfyUI (/video-comfy/imagelab/api/favorites)" || exit 1
+else
+  echo "no video ComfyUI answering at /video-comfy/ (HTTP $video); only the first was restarted"
+fi

@@ -131,6 +131,8 @@ direct `ip:port` answers 200 means that and nothing else.
 | `/imagelab/api/*` | ImageLabCore: `hashes`, `downloads`, `models`, `favorites`, `version` |
 | `/pod/app/api/files`, `/pod/app/api/node` | PUT only: what `push.sh` and `push-node.sh` write through |
 | `/llm/` | the pod's own Ollama (local LLM for ImageLab's AI helpers). `start.sh` installs it onto the volume (`/workspace/ollama`, ~1.4 GB, once per `OLLAMA_VERSION`) and runs it on 127.0.0.1:11434; models stay on the volume. `SKIP_LLM=1` turns it off. Log: `/pod/logs/llm.log` |
+| `/video-comfy/` | a **second ComfyUI, for video**, on 127.0.0.1:8191 (`COMFY_VIDEO_PORT`). nginx strips the prefix; websockets, basic auth and proxy settings as for `/`. On by default when GPU 0 has ≥ 80 GB; `COMFY_VIDEO=1/0` forces it. 502 when it is off or still starting. See *The second ComfyUI* below. Log: `/pod/logs/comfy-video.log` |
+| `/video-comfy/imagelab/api/*` | goes to the **first** ComfyUI (one owner for the hash index and downloads), except `/video-comfy/imagelab/api/favorites*`, which the second serves itself (a favorite is copied out of *its* temp/) |
 | `/pod/logs/download.log` | model download progress |
 | `/pod/logs/models-complete` | 200 once every model has landed |
 
@@ -142,6 +144,58 @@ without an ImageLab build. Models are installed from ImageLab's model browser, w
 First boot fetches **~159 GB** from `models.txt` (Wan video is ~73 GB of it). Civitai answers 403 to some
 aria2 requests — normal, the curl fallback picks them up. Watch `models-complete`.
 
+## The second ComfyUI (video)
+
+A Wan render holds a ComfyUI for minutes and its queue is one line, so `start.sh` runs a second one
+for video and ImageLab treats it as a second server whose host carries the path
+(`<pod>/video-comfy`). It starts once the first answers `/system_stats` (staggered: both import
+every custom node, and several packs write their config files then), runs in a restart loop, and
+logs to `/pod/logs/comfy-video.log`. Same `/opt/ComfyUI`, so models, input, output, custom nodes,
+ImageLabCore and the user dir (saved workflows, settings) are shared. Its own flags:
+
+| | why |
+|---|---|
+| `--temp-directory /opt/comfy-video` | its temp is `/opt/comfy-video/temp` (ComfyUI appends `temp`). ComfyUI wipes temp at every start, and ImageLab saves through PreviewImage — a restart of one must not eat the other's images |
+| `--database-url sqlite:///:memory:` | ComfyUI takes a file lock on `user/comfyui.db` for one process (`app/database/db.py` `_acquire_file_lock`); the DB only holds the assets index, which is off |
+| `IMAGELAB_CORE_SECONDARY=1` | ImageLabCore (≥ `3e51a5d`) skips its hash scan, checkpoint sort and startup downloads and serves only favorites + version; `/imagelab/api/version` says `"secondary"`. `IMAGELAB_AUTO_DOWNLOAD` is blanked too, for an older copy on the volume |
+| `--reserve-vram <images' share + 4>` | see VRAM below. The first ComfyUI gets `--reserve-vram <video's share + 4>` |
+
+`COMFY_VIDEO_ARGS` adds flags to it, as `COMFY_ARGS` does to the first.
+
+**VRAM.** ComfyUI assumes it owns the GPU. The pinned v0.34.5 runs *dynamic VRAM* (comfy-aimdo
+0.4.15) by default on NVIDIA with torch 2.8; there is no `--normalvram` in this version. Under
+it, `--reserve-vram` caps a process's own allocations at total − reserve (aimdo `budget_deficit`,
+`simple_vram_headroom`), and a process that runs short evicts its *own* weights, which then stream
+from RAM: it never takes memory back from the other, and an idle ComfyUI keeps its weights
+resident. So each one reserves the other's share. Split: video 55% of (total − 4 GB), images the
+rest; the 4 GB is what aimdo does not count (two CUDA contexts, onnxruntime in the RMBG/WD14 nodes).
+
+| GPU | images cap | video cap |
+|---|---|---|
+| A100 / H100 80 GB | ~35 GB | 41 GB |
+| H200 141 GB | ~61 GB | 75 GB |
+| B200 180 GB | ~79 GB | 96 GB |
+
+`COMFY_VIDEO_VRAM_GB` moves the split; a `--reserve-vram` in `COMFY_ARGS` / `COMFY_VIDEO_ARGS` wins
+over it (argparse keeps the last). Not used, and why: `--vram-headroom` also keeps that much free
+*device-wide*, so the second process to grow would starve; `--highvram` / `--gpu-only` turn dynamic
+VRAM off; `--disable-smart-memory` frees nothing when idle (models stay until the next load) and
+makes every load unload the rest.
+
+Caveats, none of them tried on a pod yet:
+- **GGUF** loads through ComfyUI-GGUF's own `ModelPatcher`, not the dynamic one, so it takes the old
+  estimate path, where the reserve is subtracted from the device's free memory *on top of* what the
+  other process already holds. With the other instance busy, a GGUF model may load mostly
+  offloaded (slow, not broken). Safetensors Wan (models.txt) is unaffected.
+- Both share **system RAM**; each sizes its RAM cache and pinned buffers as if it were alone.
+- `SaveImage` / `SaveVideo` counters scan `output/` per save: two saves with the same prefix in
+  the same instant could pick the same number. PreviewImage names carry a random part.
+- `scripts/push-node.sh` restarts the second too, after the first is back; `scripts/pull-images.sh`
+  also reads `/video-comfy/history`. Both skip it when `/video-comfy/system_stats` is not 200.
+- The ComfyUI editor at `/video-comfy/` should work: frontend 1.49.6 loads `./assets/…` and takes its
+  API base from `location.pathname`. nginx cuts the prefix from the raw request line (a `map` on
+  `$request_uri`), so an encoded `%2F` in `/api/userdata/workflows%2F…` survives.
+
 ## Changing code on a running pod
 
 Neither needs an image rebuild.
@@ -149,7 +203,7 @@ Neither needs an image rebuild.
 ```sh
 cd ../ImageLab && npm run build && cd -
 scripts/push.sh      <ip:port>    # ImageLab dist/ + the pod app   (~instant)
-scripts/push-node.sh <ip:port>    # ImageLabCore + ComfyUI restart (~15s)
+scripts/push-node.sh <ip:port>    # ImageLabCore + ComfyUI restart, both ComfyUIs (~15s each)
 ```
 
 Both work because that code lives on the pod's **volume**, symlinked into place by `start.sh`.

@@ -14,6 +14,10 @@ http {
   scgi_temp_path /tmp/nginx-scgi;
   client_max_body_size 0;
   map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+  # /video-comfy/<rest> -> /<rest>, cut from the raw request line. A proxy_pass with a URI part
+  # would send nginx's decoded copy instead, and ComfyUI's /api/userdata/workflows%2Fname.json
+  # (saving a workflow) would arrive as a path it has no route for.
+  map $request_uri $video_comfy_uri { ~^/video-comfy(?<rest>/.*)$ $rest; default /; }
   server {
     listen 0.0.0.0:${PROXY_PORT};
     auth_basic "imagelab";
@@ -76,6 +80,52 @@ http {
       proxy_send_timeout 3600s;
       proxy_buffering off;
       proxy_request_buffering off;
+    }
+    # The second ComfyUI, for video (start.sh runs it when the GPU has room; 502 means it is off or
+    # still starting). Same origin under a prefix, so the browser's basic auth covers it. Each block
+    # matches its counterpart for the first ComfyUI.
+    location /video-comfy/ {
+      proxy_pass http://127.0.0.1:${VIDEO_PORT}$video_comfy_uri;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_read_timeout 3600s;
+      proxy_send_timeout 3600s;
+      proxy_buffering off;
+      proxy_request_buffering off;
+    }
+    location = /video-comfy { return 301 /video-comfy/; }
+    location /video-comfy/assets/ {
+      proxy_pass http://127.0.0.1:${VIDEO_PORT}$video_comfy_uri;
+      proxy_http_version 1.1;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_hide_header Cache-Control;
+      proxy_hide_header Pragma;
+      add_header Cache-Control "public, max-age=31536000, immutable" always;
+    }
+    # ImageLabCore has one owner, the first ComfyUI: the hash index and the downloads live there
+    # (the second runs it with IMAGELAB_CORE_SECONDARY=1), so ImageLab gets the same answers from
+    # either server. Not favorites: a favorite is copied out of temp/, and each ComfyUI has its own.
+    location /video-comfy/imagelab/api/ {
+      proxy_pass http://127.0.0.1:${COMFY_PORT}$video_comfy_uri;
+      proxy_http_version 1.1;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_read_timeout 3600s;
+      proxy_buffering off;
+      proxy_request_buffering off;
+    }
+    location /video-comfy/imagelab/api/favorites {
+      proxy_pass http://127.0.0.1:${VIDEO_PORT}$video_comfy_uri;
+      proxy_http_version 1.1;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_read_timeout 3600s;
+      proxy_buffering off;
     }
     location /pod/logs/ {
       alias /workspace/imagelab-logs/;

@@ -6,6 +6,7 @@ COMFY_PORT=${COMFY_PORT:-8189}
 PROXY_PORT=${PROXY_PORT:-8188}
 APP_PORT=${IMAGELAB_APP_PORT:-8190}
 LLM_PORT=${LLM_PORT:-11434}
+VIDEO_PORT=${COMFY_VIDEO_PORT:-8191}
 COMFY_AUTH_USER=${COMFY_AUTH_USER:-imagelab}
 COMFY_ARGS=${COMFY_ARGS:-}
 
@@ -82,7 +83,7 @@ printf '%s:%s\n' "$COMFY_AUTH_USER" "$(openssl passwd -apr1 "$COMFY_AUTH_TOKEN")
 for alias in ${COMFY_AUTH_ALIASES:-}; do
   printf '%s:%s\n' "$alias" "$(openssl passwd -apr1 "$COMFY_AUTH_TOKEN")" >> /tmp/htpasswd
 done
-sed -e "s/\${PROXY_PORT}/$PROXY_PORT/g" -e "s/\${COMFY_PORT}/$COMFY_PORT/g" -e "s/\${APP_PORT}/$APP_PORT/g" -e "s/\${LLM_PORT}/$LLM_PORT/g" /opt/imagelab/nginx.conf.template > /tmp/nginx.conf
+sed -e "s/\${PROXY_PORT}/$PROXY_PORT/g" -e "s/\${COMFY_PORT}/$COMFY_PORT/g" -e "s/\${APP_PORT}/$APP_PORT/g" -e "s/\${LLM_PORT}/$LLM_PORT/g" -e "s/\${VIDEO_PORT}/$VIDEO_PORT/g" /opt/imagelab/nginx.conf.template > /tmp/nginx.conf
 
 # Check the generated config before trusting it. nginx is the only way in — ComfyUI, ImageLab and
 # the log endpoints all sit behind it — so a config it refuses would leave a running, billing pod
@@ -182,7 +183,76 @@ fi
 python /opt/imagelab/live.py 2>&1 | sed -u 's/^/[app] /' &
 echo "[start] live app supervisor on 127.0.0.1:$APP_PORT, code at ${IMAGELAB_APP_DIR:-/workspace/imagelab-app} (served at /pod/app)"
 
-# ---- ComfyUI ----------------------------------------------------------------------------------
+# ---- ComfyUI, and a second one for video at /video-comfy/ -------------------------------------
+# A Wan render holds a ComfyUI for minutes and its queue is a single line, so images wait behind
+# it. A second ComfyUI on 127.0.0.1:$VIDEO_PORT takes the video. It runs from the same /opt/ComfyUI,
+# so models, input, output, custom nodes (ImageLabCore too) and the user dir with the saved
+# workflows are shared through the symlinks above. What each keeps to itself:
+#   temp/        ComfyUI wipes it at start, and ImageLab saves through PreviewImage into it: one
+#                restarting must not eat the other's images. --temp-directory (ComfyUI adds /temp).
+#   database     ComfyUI locks user/comfyui.db for one process. The second gets an in-memory one;
+#                it only holds the assets index, which is off.
+#   ImageLabCore IMAGELAB_CORE_SECONDARY=1: no hash scan, no sort, no downloads, favorites only.
+#                nginx sends its other /imagelab/api/* to the first. IMAGELAB_AUTO_DOWNLOAD is
+#                blanked too, for an ImageLabCore on the volume older than that switch.
+#
+# On by default when GPU 0 has 80 GB or more (A100/H100 80 GB, H200, B200); a 5090 has no room for
+# two. COMFY_VIDEO=1 / 0 forces it. Log: /pod/logs/comfy-video.log.
+#
+# VRAM: ComfyUI assumes it owns the GPU. Its dynamic VRAM (comfy-aimdo, on by default here) caps
+# a process's own allocations at total - --reserve-vram and evicts its own weights (they stream
+# from RAM instead) when the device runs low; it never takes memory back from the other process,
+# and an idle ComfyUI keeps its weights resident. So each one reserves the other's share: video
+# gets 55% of (total - 4 GB), images the rest, and the 4 GB covers what aimdo does not count (two
+# CUDA contexts, onnxruntime in the background-removal and tagger nodes). COMFY_VIDEO_VRAM_GB moves
+# the split; a --reserve-vram in COMFY_ARGS / COMFY_VIDEO_ARGS overrides it (the last flag wins).
+GPU_MIB=$(nvidia-smi -i 0 --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -dc 0-9 || true)
+GPU_MIB=${GPU_MIB:-0}
+case "${COMFY_VIDEO:-auto}" in
+  1|true|yes|on)  VIDEO_ON=1 ;;
+  0|false|no|off) VIDEO_ON=0 ;;
+  *) if [ "$GPU_MIB" -ge 80000 ]; then VIDEO_ON=1; else VIDEO_ON=0; fi ;;
+esac
+IMAGE_VRAM_ARGS=""; VIDEO_VRAM_ARGS=""
+if [ "$VIDEO_ON" = 1 ] && [ "$GPU_MIB" -gt 0 ]; then
+  # prints: images' --reserve-vram, video's --reserve-vram, video share, images share (GB)
+  read -r IMAGE_RESERVE VIDEO_RESERVE VIDEO_GB IMAGE_GB < <(awk -v mib="$GPU_MIB" -v want="${COMFY_VIDEO_VRAM_GB:-}" 'BEGIN {
+    t = mib / 1024; slack = 4; free = t - slack
+    v = (want != "") ? want + 0 : int(free * 0.55)
+    if (v > free - 4) v = free - 4; if (v < 4) v = 4
+    i = free - v
+    printf "%.1f %.1f %.1f %.1f\n", v + slack, i + slack, v, i }')
+  IMAGE_VRAM_ARGS="--reserve-vram $IMAGE_RESERVE"
+  VIDEO_VRAM_ARGS="--reserve-vram $VIDEO_RESERVE"
+fi
+
 cd /opt/ComfyUI
-echo "[start] ComfyUI $(cat .pinned-commit 2>/dev/null) on 127.0.0.1:$COMFY_PORT"
-exec python main.py --listen 127.0.0.1 --port "$COMFY_PORT" --preview-method taesd $COMFY_ARGS
+VIDEO_DIR=/opt/comfy-video   # its temp/; container disk, like the first one's
+if [ "$VIDEO_ON" = 1 ]; then
+  echo "[start] video ComfyUI on 127.0.0.1:$VIDEO_PORT (served at /video-comfy/); GPU ${GPU_MIB} MiB, video ${VIDEO_GB:-?} GB / images ${IMAGE_GB:-?} GB"
+  (
+    set +e
+    echo "===== boot $(date -u +%FT%TZ): GPU ${GPU_MIB} MiB, video ${VIDEO_GB:-?} GB, images ${IMAGE_GB:-?} GB ====="
+    # Start once the first one answers. Both import every custom node and several packs write
+    # their config files while importing; staggered, the first has also run the DB migration and
+    # ImageLabCore's checkpoint sort, and the RAM peak of two loads does not land at once.
+    for _ in $(seq 1 120); do
+      curl -fs -o /dev/null -m 5 "http://127.0.0.1:$COMFY_PORT/system_stats" && break
+      sleep 5
+    done
+    mkdir -p "$VIDEO_DIR"
+    while true; do
+      echo "starting $(date -u +%FT%TZ)"
+      IMAGELAB_CORE_SECONDARY=1 IMAGELAB_AUTO_DOWNLOAD= python main.py --listen 127.0.0.1 --port "$VIDEO_PORT" \
+        --preview-method taesd --temp-directory "$VIDEO_DIR" --database-url sqlite:///:memory: \
+        $VIDEO_VRAM_ARGS ${COMFY_VIDEO_ARGS:-}
+      echo "exited ($?); restarting in 5s"; sleep 5
+    done
+  ) 2>&1 | tee -a "$LOG_DIR/comfy-video.log" | sed -u 's/^/[video] /' &
+else
+  echo "[start] video ComfyUI off (GPU ${GPU_MIB} MiB, COMFY_VIDEO=${COMFY_VIDEO:-auto}); /video-comfy/ answers 502" \
+    | tee -a "$LOG_DIR/comfy-video.log"
+fi
+
+echo "[start] ComfyUI $(cat .pinned-commit 2>/dev/null) on 127.0.0.1:$COMFY_PORT ${IMAGE_VRAM_ARGS}"
+exec python main.py --listen 127.0.0.1 --port "$COMFY_PORT" --preview-method taesd $IMAGE_VRAM_ARGS $COMFY_ARGS

@@ -13,6 +13,7 @@
 #   /history                 every prompt this ComfyUI has run, with the images each produced.
 #                            The app saves through PreviewImage, so these live in temp/ and
 #                            ComfyUI wipes temp/ on its next start — they are gone after a resume.
+#   /video-comfy/history     the same for the pod's second (video) ComfyUI, when it runs.
 #   /imagelab/api/favorites      anything explicitly starred, copied out of temp/ into a dated tree by
 #                            ImageLabCore. These survive a restart but not a terminate.
 set -euo pipefail
@@ -40,20 +41,34 @@ save() {  # save <url> <filename>
   fi
 }
 
-echo "-- from /history --"
+# pull_history <server base>: every image in that ComfyUI's /history, through its own /view.
 # One request for the whole history; jq flattens every output image of every prompt.
 # jq builds the whole query string, already URI-encoded. An earlier version split a @tsv row with
 # `read`, which silently ate the empty subfolder: tab counts as whitespace to `read`, so runs of
 # tabs collapse and every field shifts left — the type ended up in `subfolder` and the request
 # 400'd. Both fields below are always non-empty, so the single separator is safe.
-curl -sS -u "$AUTH" "${BASE}/history" \
-  | jq -r '.[] | .outputs // {} | .[] | .images // [] | .[]
-           | "filename=\(.filename|@uri)&subfolder=\((.subfolder // "")|@uri)&type=\((.type // "output")|@uri)\t\(.filename)"' \
-  | sort -u \
-  | while IFS=$'\t' read -r query filename; do
-      [ -n "$filename" ] || continue
-      save "${BASE}/view?${query}" "$filename"
-    done
+pull_history() {
+  curl -sS -u "$AUTH" "$1/history" \
+    | jq -r '.[] | .outputs // {} | .[] | .images // [] | .[]
+             | "filename=\(.filename|@uri)&subfolder=\((.subfolder // "")|@uri)&type=\((.type // "output")|@uri)\t\(.filename)"' \
+    | sort -u \
+    | while IFS=$'\t' read -r query filename; do
+        [ -n "$filename" ] || continue
+        save "$1/view?${query}" "$filename"
+      done
+}
+
+echo "-- from /history --"
+pull_history "$BASE"
+
+# The second, video ComfyUI has its own history and its own temp/ (output/ is shared, so a file
+# both list lands once). Not there (502) on a small GPU or with COMFY_VIDEO=0.
+echo "-- from /video-comfy/history --"
+if [ "$(curl -s -o /dev/null -w '%{http_code}' -m 10 -u "$AUTH" "${BASE}/video-comfy/system_stats")" = "200" ]; then
+  pull_history "${BASE}/video-comfy"
+else
+  echo "  (no video ComfyUI on this pod)"
+fi
 
 echo "-- from /imagelab/api/favorites --"
 # 404 is fine: it only means this pod's image predates ImageLabCore.
