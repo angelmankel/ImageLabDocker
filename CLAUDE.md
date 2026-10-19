@@ -131,8 +131,9 @@ direct `ip:port` answers 200 means that and nothing else.
 | `/imagelab/api/*` | ImageLabCore: `hashes`, `downloads`, `models`, `favorites`, `version` |
 | `/pod/app/api/files`, `/pod/app/api/node` | PUT only: what `push.sh` and `push-node.sh` write through |
 | `/llm/` | the pod's own Ollama (local LLM for ImageLab's AI helpers). `start.sh` installs it onto the volume (`/workspace/ollama`, ~1.4 GB, once per `OLLAMA_VERSION`) and runs it on 127.0.0.1:11434; models stay on the volume. `SKIP_LLM=1` turns it off. Log: `/pod/logs/llm.log` |
-| `/video-comfy/` | a **second ComfyUI, for video**, on 127.0.0.1:8191 (`COMFY_VIDEO_PORT`). nginx strips the prefix; websockets, basic auth and proxy settings as for `/`. On by default when GPU 0 has ≥ 80 GB; `COMFY_VIDEO=1/0` forces it. 502 when it is off or still starting. See *The second ComfyUI* below. Log: `/pod/logs/comfy-video.log` |
+| `/video-comfy/` | a **second ComfyUI, for video**, on 127.0.0.1:8191 (`COMFY_VIDEO_PORT`). nginx strips the prefix; websockets, basic auth and proxy settings as for `/`. On by default with 2+ GPUs (it gets its own card) or one GPU of ≥ 80 GB (shared); `COMFY_VIDEO=1/0` forces it. 502 when it is off or still starting. See *The second ComfyUI* below. Log: `/pod/logs/comfy-video.log` |
 | `/video-comfy/imagelab/api/*` | goes to the **first** ComfyUI (one owner for the hash index and downloads), except `/video-comfy/imagelab/api/favorites*`, which the second serves itself (a favorite is copied out of *its* temp/) |
+| `/pod/logs/instances.json` | what `start.sh` launched at boot (configuration, not liveness), e.g. `{"instances": 2, "gpus": 2, "mode": "separate", "image": {"path": "/", "gpu": 0, "vram_gb": null}, "video": {"path": "/video-comfy/", "gpu": 1, "vram_gb": null}, "llm": {"path": "/llm/", "gpu": 0}}`. `mode` is `single` (one ComfyUI), `shared` (two on one card; `vram_gb` = each one's share) or `separate`; `video` / `llm` are `null` when off; `gpu` is an nvidia-smi index, `null` when unknown |
 | `/pod/logs/download.log` | model download progress |
 | `/pod/logs/models-complete` | 200 once every model has landed |
 
@@ -148,9 +149,9 @@ aria2 requests — normal, the curl fallback picks them up. Watch `models-comple
 
 A Wan render holds a ComfyUI for minutes and its queue is one line, so `start.sh` runs a second one
 for video and ImageLab treats it as a second server whose host carries the path
-(`<pod>/video-comfy`). It starts once the first answers `/system_stats` (staggered: both import
-every custom node, and several packs write their config files then), runs in a restart loop, and
-logs to `/pod/logs/comfy-video.log`. Same `/opt/ComfyUI`, so models, input, output, custom nodes,
+(`<pod>/video-comfy`); which GPU it gets is below. It starts once the first answers
+`/system_stats` (staggered: both import every custom node, and several packs write their config
+files then), runs in a restart loop, and logs to `/pod/logs/comfy-video.log`. Same `/opt/ComfyUI`, so models, input, output, custom nodes,
 ImageLabCore and the user dir (saved workflows, settings) are shared. Its own flags:
 
 | | why |
@@ -158,12 +159,36 @@ ImageLabCore and the user dir (saved workflows, settings) are shared. Its own fl
 | `--temp-directory /opt/comfy-video` | its temp is `/opt/comfy-video/temp` (ComfyUI appends `temp`). ComfyUI wipes temp at every start, and ImageLab saves through PreviewImage — a restart of one must not eat the other's images |
 | `--database-url sqlite:///:memory:` | ComfyUI takes a file lock on `user/comfyui.db` for one process (`app/database/db.py` `_acquire_file_lock`); the DB only holds the assets index, which is off |
 | `IMAGELAB_CORE_SECONDARY=1` | ImageLabCore (≥ `3e51a5d`) skips its hash scan, checkpoint sort and startup downloads and serves only favorites + version; `/imagelab/api/version` says `"secondary"`. `IMAGELAB_AUTO_DOWNLOAD` is blanked too, for an older copy on the volume |
-| `--reserve-vram <images' share + 4>` | see VRAM below. The first ComfyUI gets `--reserve-vram <video's share + 4>` |
+| `--reserve-vram <images' share + 4>` | only when both share one card; see VRAM below. The first ComfyUI then gets `--reserve-vram <video's share + 4>` |
 
 `COMFY_VIDEO_ARGS` adds flags to it, as `COMFY_ARGS` does to the first.
 
-**VRAM.** ComfyUI assumes it owns the GPU. The pinned v0.34.5 runs *dynamic VRAM* (comfy-aimdo
-0.4.15) by default on NVIDIA with torch 2.8; there is no `--normalvram` in this version. Under
+**GPU layout.** `start.sh` counts the GPUs (`nvidia-smi --query-gpu=index,uuid,memory.total`) and logs
+one line, e.g. `[start] 2 GPU(s): image→0, video→1, llm→0`:
+
+| GPUs | image ComfyUI | video ComfyUI | Ollama |
+|---|---|---|---|
+| 2+ | GPU 0, whole card | GPU 1, whole card, always on, no VRAM flags | GPU 2 if there is one, else GPU 0 |
+| 1, ≥ 80 GB | GPU 0, `--reserve-vram` | same card, `--reserve-vram` (split below) | shares |
+| 1, < 80 GB (5090) | GPU 0 | off | shares |
+| none seen | unpinned | off | unpinned |
+
+Ollama goes with images, not video: its calls are short and come while prompts are written, and
+video is the long job that wants a whole card; left to spread, Ollama puts layers on every GPU as
+soon as a model does not fit one. Overrides: `COMFY_VIDEO=1/0`; `COMFY_IMAGE_GPU`,
+`COMFY_VIDEO_GPU`, `LLM_GPU` (nvidia-smi indexes; one that does not exist is logged and ignored).
+Image and video on the same index means shared mode, VRAM split and all.
+
+Each process is pinned by `CUDA_VISIBLE_DEVICES=<GPU UUID>` in its environment, with
+`CUDA_DEVICE_ORDER=PCI_BUS_ID`. Not `--cuda-device`: the pinned `main.py` sets the variable from it
+only after `comfy_aimdo` has loaded, and an environment survives `/manager/reboot`'s `execv` as argv
+does. A UUID because CUDA numbers devices fastest-first by default, nvidia-smi by PCI bus.
+
+To get two cards, deploy with `gpuCount: 2`. **Resume with the same `gpuCount`**: the
+`podResume` below says 1, and a two-GPU pod resumed that way comes back in one-card mode.
+
+**VRAM on a shared card.** ComfyUI assumes it owns the GPU. The pinned v0.34.5 runs *dynamic
+VRAM* (comfy-aimdo 0.4.15) by default on NVIDIA with torch 2.8; there is no `--normalvram` in this version. Under
 it, `--reserve-vram` caps a process's own allocations at total − reserve (aimdo `budget_deficit`,
 `simple_vram_headroom`), and a process that runs short evicts its *own* weights, which then stream
 from RAM: it never takes memory back from the other, and an idle ComfyUI keeps its weights
@@ -187,6 +212,8 @@ Caveats, none of them tried on a pod yet:
   estimate path, where the reserve is subtracted from the device's free memory *on top of* what the
   other process already holds. With the other instance busy, a GGUF model may load mostly
   offloaded (slow, not broken). Safetensors Wan (models.txt) is unaffected.
+- Ollama's VRAM is not part of the split. On a shared card it loads beside both; ComfyUI's dynamic
+  VRAM checks the device's real free memory and gives way by streaming its own weights.
 - Both share **system RAM**; each sizes its RAM cache and pinned buffers as if it were alone.
 - `SaveImage` / `SaveVideo` counters scan `output/` per save: two saves with the same prefix in
   the same instant could pick the same number. PreviewImage names carry a random part.

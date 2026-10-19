@@ -146,6 +146,101 @@ if [ "${SKIP_MODEL_DOWNLOAD:-0}" != 1 ]; then
   ) 2>&1 | tee -a "$LOG_DIR/download.log" &
 fi
 
+# ---- GPU layout: which GPU each server gets ------------------------------------------------------
+# Counted at boot, not configured, so one template fits every pod:
+#   2+ GPUs  images on GPU 0, video (the second ComfyUI, below) on GPU 1, each owning its card, so
+#            no VRAM limits. The LLM goes on GPU 2 when there is one, else on the image GPU: its
+#            calls are short and come while prompts are written, and video is the long job that wants
+#            its whole card. Left to spread over every GPU, Ollama would put layers on the video
+#            card as soon as a model did not fit one.
+#   1 GPU    a second ComfyUI on the same card only with 80 GB or more (A100/H100 80 GB, H200, B200),
+#            under the VRAM split below; a 5090 runs one. The LLM shares the card.
+#   none     nvidia-smi failed: one ComfyUI, nothing pinned.
+# Overrides: COMFY_VIDEO=1/0 forces the second ComfyUI on/off. COMFY_IMAGE_GPU, COMFY_VIDEO_GPU and
+# LLM_GPU (nvidia-smi indexes) force the mapping; image and video on one index means shared mode.
+# What was decided is logged in one line and written to /pod/logs/instances.json.
+#
+# Each process is pinned by CUDA_VISIBLE_DEVICES=<GPU UUID> in its environment. Not ComfyUI's
+# --cuda-device: main.py sets the variable from it only after comfy_aimdo has loaded, and the
+# environment survives /manager/reboot's execv as argv does. A UUID because CUDA numbers devices
+# fastest-first by default and nvidia-smi by PCI bus; CUDA_DEVICE_ORDER=PCI_BUS_ID makes anything
+# that counts devices agree with the log.
+#
+# Shared-card VRAM: ComfyUI assumes it owns the GPU. Its dynamic VRAM (comfy-aimdo, on by default
+# here) caps a process's own allocations at total - --reserve-vram and evicts its own weights (they
+# stream from RAM instead) when the device runs low; it never takes memory back from the other
+# process, and an idle ComfyUI keeps its weights resident. So each one reserves the other's share:
+# video gets 55% of (total - 4 GB), images the rest, and the 4 GB covers what aimdo does not count
+# (two CUDA contexts, onnxruntime in the background-removal and tagger nodes). COMFY_VIDEO_VRAM_GB
+# moves the split; a --reserve-vram in COMFY_ARGS / COMFY_VIDEO_ARGS overrides it (the last wins).
+export CUDA_DEVICE_ORDER=PCI_BUS_ID
+GPU_LIST=$(nvidia-smi --query-gpu=index,uuid,memory.total --format=csv,noheader,nounits 2>/dev/null || true)
+GPU_COUNT=$(printf '%s\n' "$GPU_LIST" | grep -c 'GPU-' || true)
+gpu_field() {  # gpu_field <index> <2 = uuid | 3 = MiB>
+  printf '%s\n' "$GPU_LIST" | awk -F', *' -v i="$1" -v f="$2" '$1 == i { print $f }'
+}
+pick_gpu() {   # pick_gpu <override> <default>: the override when it names a GPU here
+  if [ -n "$1" ] && [ -n "$(gpu_field "$1" 2)" ]; then echo "$1"; return; fi
+  [ -z "$1" ] || echo "[start] !! no GPU '$1' on this pod; using '${2:-none}'" >&2
+  echo "$2"
+}
+if [ "$GPU_COUNT" -ge 2 ]; then
+  def_image=0; def_video=1; def_llm=0; [ "$GPU_COUNT" -lt 3 ] || def_llm=2
+elif [ "$GPU_COUNT" -eq 1 ]; then
+  def_image=0; def_video=0; def_llm=0
+else
+  def_image=""; def_video=""; def_llm=""
+fi
+IMAGE_GPU=$(pick_gpu "${COMFY_IMAGE_GPU:-}" "$def_image")
+VIDEO_GPU=$(pick_gpu "${COMFY_VIDEO_GPU:-}" "$def_video")
+LLM_GPU=$(pick_gpu "${LLM_GPU:-}" "$def_llm")
+SHARED=0; SHARED_MIB=0
+if [ -n "$IMAGE_GPU" ] && [ "$IMAGE_GPU" = "$VIDEO_GPU" ]; then
+  SHARED=1; SHARED_MIB=$(gpu_field "$IMAGE_GPU" 3 | tr -dc 0-9); SHARED_MIB=${SHARED_MIB:-0}
+fi
+case "${COMFY_VIDEO:-auto}" in
+  1|true|yes|on)  VIDEO_ON=1 ;;
+  0|false|no|off) VIDEO_ON=0 ;;
+  *) if [ -n "$VIDEO_GPU" ] && { [ "$SHARED" = 0 ] || [ "$SHARED_MIB" -ge 80000 ]; }; then VIDEO_ON=1; else VIDEO_ON=0; fi ;;
+esac
+IMAGE_VRAM_ARGS=""; VIDEO_VRAM_ARGS=""; IMAGE_GB=""; VIDEO_GB=""
+if [ "$VIDEO_ON" = 1 ] && [ "$SHARED" = 1 ] && [ "$SHARED_MIB" -gt 0 ]; then
+  # prints: images' --reserve-vram, video's --reserve-vram, video share, images share (GB)
+  read -r IMAGE_RESERVE VIDEO_RESERVE VIDEO_GB IMAGE_GB < <(awk -v mib="$SHARED_MIB" -v want="${COMFY_VIDEO_VRAM_GB:-}" 'BEGIN {
+    t = mib / 1024; slack = 4; free = t - slack
+    v = (want != "") ? want + 0 : int(free * 0.55)
+    if (v > free - 4) v = free - 4; if (v < 4) v = 4
+    i = free - v
+    printf "%.1f %.1f %.1f %.1f\n", v + slack, i + slack, v, i }')
+  IMAGE_VRAM_ARGS="--reserve-vram $IMAGE_RESERVE"
+  VIDEO_VRAM_ARGS="--reserve-vram $VIDEO_RESERVE"
+fi
+# "CUDA_VISIBLE_DEVICES=<uuid>" for env(1), or nothing when the GPU is not known
+cuda_env() { [ -z "$1" ] || echo "CUDA_VISIBLE_DEVICES=$(gpu_field "$1" 2)"; }
+IMAGE_CUDA=$(cuda_env "$IMAGE_GPU"); VIDEO_CUDA=$(cuda_env "$VIDEO_GPU"); LLM_CUDA=$(cuda_env "$LLM_GPU")
+[ "${SKIP_LLM:-0}" != 1 ] || LLM_GPU=""
+
+if [ "$VIDEO_ON" != 1 ]; then video_desc="video off"
+elif [ "$SHARED" = 1 ]; then video_desc="video→${VIDEO_GPU} (same card: images ${IMAGE_GB:-?} GB, video ${VIDEO_GB:-?} GB)"
+else video_desc="video→${VIDEO_GPU:-?}"; fi
+[ "${SKIP_LLM:-0}" = 1 ] && llm_desc="llm off" || llm_desc="llm→${LLM_GPU:-?}"
+echo "[start] $GPU_COUNT GPU(s): image→${IMAGE_GPU:-?}, $video_desc, $llm_desc$([ "$SHARED" = 1 ] && echo " ($SHARED_MIB MiB)")"
+
+# What runs, for ImageLab and for people: configuration at boot, not liveness (502 = not up yet).
+jval() { if [ -n "$1" ]; then echo "$1"; else echo null; fi; }
+if [ "$VIDEO_ON" = 1 ]; then mode=$([ "$SHARED" = 1 ] && echo shared || echo separate); else mode=single; fi
+{
+  printf '{"instances": %s, "gpus": %s, "mode": "%s",\n' "$((1 + VIDEO_ON))" "$GPU_COUNT" "$mode"
+  printf ' "image": {"path": "/", "gpu": %s, "vram_gb": %s},\n' "$(jval "$IMAGE_GPU")" "$(jval "$IMAGE_GB")"
+  if [ "$VIDEO_ON" = 1 ]; then
+    printf ' "video": {"path": "/video-comfy/", "gpu": %s, "vram_gb": %s},\n' "$(jval "$VIDEO_GPU")" "$(jval "$VIDEO_GB")"
+  else
+    printf ' "video": null,\n'
+  fi
+  if [ "${SKIP_LLM:-0}" = 1 ]; then printf ' "llm": null}\n'
+  else printf ' "llm": {"path": "/llm/", "gpu": %s}}\n' "$(jval "$LLM_GPU")"; fi
+} > "$LOG_DIR/instances.json"
+
 # ---- the pod's own LLM server (Ollama), served at /llm/ ------------------------------------------
 # An optional second AI server for ImageLab, beside the LAN one (winold): the pod has the VRAM. The
 # 1.4 GB release goes onto the volume once per version rather than into the image, so the image
@@ -171,6 +266,7 @@ if [ "${SKIP_LLM:-0}" != 1 ]; then
     fi
     export OLLAMA_HOST=127.0.0.1:$LLM_PORT OLLAMA_MODELS=$LLM_DIR/models OLLAMA_ORIGINS='*' \
       OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-10m}
+    [ -z "$LLM_CUDA" ] || export "$LLM_CUDA"   # its GPU, from "GPU layout" above
     while [ -x "$LLM_DIR/dist/bin/ollama" ]; do
       "$LLM_DIR/dist/bin/ollama" serve
       echo "ollama exited ($?); restarting in 5s"; sleep 5
@@ -196,43 +292,15 @@ echo "[start] live app supervisor on 127.0.0.1:$APP_PORT, code at ${IMAGELAB_APP
 #                nginx sends its other /imagelab/api/* to the first. IMAGELAB_AUTO_DOWNLOAD is
 #                blanked too, for an ImageLabCore on the volume older than that switch.
 #
-# On by default when GPU 0 has 80 GB or more (A100/H100 80 GB, H200, B200); a 5090 has no room for
-# two. COMFY_VIDEO=1 / 0 forces it. Log: /pod/logs/comfy-video.log.
-#
-# VRAM: ComfyUI assumes it owns the GPU. Its dynamic VRAM (comfy-aimdo, on by default here) caps
-# a process's own allocations at total - --reserve-vram and evicts its own weights (they stream
-# from RAM instead) when the device runs low; it never takes memory back from the other process,
-# and an idle ComfyUI keeps its weights resident. So each one reserves the other's share: video
-# gets 55% of (total - 4 GB), images the rest, and the 4 GB covers what aimdo does not count (two
-# CUDA contexts, onnxruntime in the background-removal and tagger nodes). COMFY_VIDEO_VRAM_GB moves
-# the split; a --reserve-vram in COMFY_ARGS / COMFY_VIDEO_ARGS overrides it (the last flag wins).
-GPU_MIB=$(nvidia-smi -i 0 --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -dc 0-9 || true)
-GPU_MIB=${GPU_MIB:-0}
-case "${COMFY_VIDEO:-auto}" in
-  1|true|yes|on)  VIDEO_ON=1 ;;
-  0|false|no|off) VIDEO_ON=0 ;;
-  *) if [ "$GPU_MIB" -ge 80000 ]; then VIDEO_ON=1; else VIDEO_ON=0; fi ;;
-esac
-IMAGE_VRAM_ARGS=""; VIDEO_VRAM_ARGS=""
-if [ "$VIDEO_ON" = 1 ] && [ "$GPU_MIB" -gt 0 ]; then
-  # prints: images' --reserve-vram, video's --reserve-vram, video share, images share (GB)
-  read -r IMAGE_RESERVE VIDEO_RESERVE VIDEO_GB IMAGE_GB < <(awk -v mib="$GPU_MIB" -v want="${COMFY_VIDEO_VRAM_GB:-}" 'BEGIN {
-    t = mib / 1024; slack = 4; free = t - slack
-    v = (want != "") ? want + 0 : int(free * 0.55)
-    if (v > free - 4) v = free - 4; if (v < 4) v = 4
-    i = free - v
-    printf "%.1f %.1f %.1f %.1f\n", v + slack, i + slack, v, i }')
-  IMAGE_VRAM_ARGS="--reserve-vram $IMAGE_RESERVE"
-  VIDEO_VRAM_ARGS="--reserve-vram $VIDEO_RESERVE"
-fi
+# Whether it runs, on which GPU and with what VRAM flags: see "GPU layout" above.
 
 cd /opt/ComfyUI
 VIDEO_DIR=/opt/comfy-video   # its temp/; container disk, like the first one's
 if [ "$VIDEO_ON" = 1 ]; then
-  echo "[start] video ComfyUI on 127.0.0.1:$VIDEO_PORT (served at /video-comfy/); GPU ${GPU_MIB} MiB, video ${VIDEO_GB:-?} GB / images ${IMAGE_GB:-?} GB"
+  echo "[start] video ComfyUI on 127.0.0.1:$VIDEO_PORT (served at /video-comfy/), GPU ${VIDEO_GPU:-?} ${VIDEO_VRAM_ARGS}"
   (
     set +e
-    echo "===== boot $(date -u +%FT%TZ): GPU ${GPU_MIB} MiB, video ${VIDEO_GB:-?} GB, images ${IMAGE_GB:-?} GB ====="
+    echo "===== boot $(date -u +%FT%TZ): $GPU_COUNT GPU(s), image→${IMAGE_GPU:-?}, $video_desc ====="
     # Start once the first one answers. Both import every custom node and several packs write
     # their config files while importing; staggered, the first has also run the DB migration and
     # ImageLabCore's checkpoint sort, and the RAM peak of two loads does not land at once.
@@ -243,16 +311,16 @@ if [ "$VIDEO_ON" = 1 ]; then
     mkdir -p "$VIDEO_DIR"
     while true; do
       echo "starting $(date -u +%FT%TZ)"
-      IMAGELAB_CORE_SECONDARY=1 IMAGELAB_AUTO_DOWNLOAD= python main.py --listen 127.0.0.1 --port "$VIDEO_PORT" \
+      env $VIDEO_CUDA IMAGELAB_CORE_SECONDARY=1 IMAGELAB_AUTO_DOWNLOAD= python main.py --listen 127.0.0.1 --port "$VIDEO_PORT" \
         --preview-method taesd --temp-directory "$VIDEO_DIR" --database-url sqlite:///:memory: \
         $VIDEO_VRAM_ARGS ${COMFY_VIDEO_ARGS:-}
       echo "exited ($?); restarting in 5s"; sleep 5
     done
   ) 2>&1 | tee -a "$LOG_DIR/comfy-video.log" | sed -u 's/^/[video] /' &
 else
-  echo "[start] video ComfyUI off (GPU ${GPU_MIB} MiB, COMFY_VIDEO=${COMFY_VIDEO:-auto}); /video-comfy/ answers 502" \
+  echo "[start] video ComfyUI off ($GPU_COUNT GPU(s), ${SHARED_MIB} MiB to share, COMFY_VIDEO=${COMFY_VIDEO:-auto}); /video-comfy/ answers 502" \
     | tee -a "$LOG_DIR/comfy-video.log"
 fi
 
-echo "[start] ComfyUI $(cat .pinned-commit 2>/dev/null) on 127.0.0.1:$COMFY_PORT ${IMAGE_VRAM_ARGS}"
-exec python main.py --listen 127.0.0.1 --port "$COMFY_PORT" --preview-method taesd $IMAGE_VRAM_ARGS $COMFY_ARGS
+echo "[start] ComfyUI $(cat .pinned-commit 2>/dev/null) on 127.0.0.1:$COMFY_PORT ${IMAGE_CUDA} ${IMAGE_VRAM_ARGS}"
+exec env $IMAGE_CUDA python main.py --listen 127.0.0.1 --port "$COMFY_PORT" --preview-method taesd $IMAGE_VRAM_ARGS $COMFY_ARGS
