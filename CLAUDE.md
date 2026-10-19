@@ -284,6 +284,19 @@ the newer lightx2v I2V 260412 / T2V Seko V2.0 speed LoRAs (~3.7 GB). Not added, 
 tested only), Fun Camera / VACE 2.2 experts (15–17 GB each), GIMM-VFI (needs cupy). None of the new graph
 steps has run on a pod yet; the first run of each is the test.
 
+**MiniMax H3 (2026-10-19).** ImageLab's Video mode has a Wan 2.2 | MiniMax H3 switch. H3 is one 33B omni model (video +
+32 kHz stereo audio, 24 fps, 5–15 s; text, first/last frame, reference pictures). Its nodes are in ComfyUI v0.34.5 itself
+(`comfy_extras/nodes_minimax_h3.py`: `EmptyMiniMaxH3LatentAV`, `MiniMaxH3ImageToVideo`, `MiniMaxH3ReferenceToVideo`,
+`MiniMaxH3AddGuide`, `MiniMaxH3SigmaShift`; `CLIPLoader` type `minimax`) and the pinned KJNodes (`MiniMaxLowVRAMAttention`,
+`MiniMaxChunkFeedForward`); the pod's ComfyUI also ships the `video_minimax_h3_*` templates. `models.txt` got the templates'
+files (~69 GB): pruned INT8 fl2va + ref2va (21 GB each), the NVFP4-AWQ Qwen3-VL-32B text encoder (16 GB; the model card says it
+needs no Blackwell GPU — unverified on the A100), fp16 video VAE, fp32 audio VAE, three lightx2v turbo LoRAs. Pod
+`kvcm8mscs0ffw3` also has the INT8 text encoder (27 GB) as a fallback, not in models.txt. The full pruned bf16 (40 GB) does not
+fit the shared card's 41 GB video share. Not added: SageAttention (no wheel; artefacts with int8_convrot), the hosted 2K
+upscaler / Context-IR (Comfy Cloud only), Fun ControlNet. **No H3 clip has been rendered from ImageLab yet** (Donny asked for
+no test renders); the graphs were validated against `/object_info` and `/prompt`. Licence: MiniMax community licence, and
+Comfy's page says use in the US / EU / UK / Korea needs a commercial licence — Donny was told on 10-19 and asked for it anyway.
+
 Anima is a diffusion model only: `UNETLoader` from `diffusion_models`, with
 `CLIPLoader` (`qwen_3_06b_base`, type `stable_diffusion`) and `VAELoader` (`qwen_image_vae`).
 
@@ -321,11 +334,11 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
   images were pulled to `/mnt/games/images/runpod/09-23-2026/` (147 files, 18 favorites) and its
   workflows were pulled (unchanged).
 - **The image pins ImageLabCore `afaad59`** (live preview cap 1024 by default, `IMAGELAB_PREVIEW_SIZE`, `GET/POST /imagelab/api/preview-size` changes it with no restart; secondary mode for the pod's second, video ComfyUI: `IMAGELAB_CORE_SECONDARY=1`; diffusion models sorted out of checkpoints/, 8-connection downloads, Hugging Face URLs, model inspect; GGUF files keep `.gguf` and go to diffusion_models; a finished download clears ComfyUI's folder cache so the file shows in the pickers without a restart).
-- **The image pins ImageLab `705679d`** (tabs, quick search, My models, embeddings, browser, loopback frames; CivitAI image meta fix; Clear all button; phone Settings; phone AI generator + selects; model types + quality-tag pills + BREAK; video previews play in browser, modal and fullscreen; no wheel seek on tiles; single-pick model picker (Shift / long press for several); Anima family; SD 1.5; Flux, Z-Image Turbo, Qwen-Image families; Video view (Wan 2.2); GGUF Wan models via UnetLoaderGGUF, no second speed LoRA on mixes that have one inside; Loopback dual sliders; local LLM provider (Ollama) + model manager; send to video + pick a generation in drop zones; PWA re-checks index.html; OLED black darkness; Model Type dropdown no longer flickers in its modal; base-model family filter in the model downloader and My models; phone Parameters settings list with swipe-back; Venice model dropdown, AI picker flicker fix; local LLM on Home PC or This pod; Video view in labelled sections, phone settings list; unified Image / Video / Workflow workspace with Simple / Advanced, snippet chips, video server roles; app-wide dropdown placement fix; video parameters, presets, sweeps, NAG, RIFE interpolation, end image, colour match; game controllers incl. Switch pads; native-feeling result swiping with springs, pull-down close, shared-element open; send results between Image, Video and Workflow; low / high hints under the advanced sliders).
+- **The image pins ImageLab `f595430`** (MiniMax H3 engine in Video mode, clips with audio; tabs, quick search, My models, embeddings, browser, loopback frames; CivitAI image meta fix; Clear all button; phone Settings; phone AI generator + selects; model types + quality-tag pills + BREAK; video previews play in browser, modal and fullscreen; no wheel seek on tiles; single-pick model picker (Shift / long press for several); Anima family; SD 1.5; Flux, Z-Image Turbo, Qwen-Image families; Video view (Wan 2.2); GGUF Wan models via UnetLoaderGGUF, no second speed LoRA on mixes that have one inside; Loopback dual sliders; local LLM provider (Ollama) + model manager; send to video + pick a generation in drop zones; PWA re-checks index.html; OLED black darkness; Model Type dropdown no longer flickers in its modal; base-model family filter in the model downloader and My models; phone Parameters settings list with swipe-back; Venice model dropdown, AI picker flicker fix; local LLM on Home PC or This pod; Video view in labelled sections, phone settings list; unified Image / Video / Workflow workspace with Simple / Advanced, snippet chips, video server roles; app-wide dropdown placement fix; video parameters, presets, sweeps, NAG, RIFE interpolation, end image, colour match; game controllers incl. Switch pads; native-feeling result swiping with springs, pull-down close, shared-element open; send results between Image, Video and Workflow; low / high hints under the advanced sliders).
 - **The image** is `ghcr.io/angelmankel/imagelab-pod:latest`, public, built by Actions from `main`.
   It carries ImageLab and ImageLabCore at the pins in the `Dockerfile` and the files in
   `workflows/` (five tested, five reference ones not yet rendered).
-- **Models:** `models.txt` is ~163 GB (10-18: +RIFE/FILM, Anime Style v2 LoRAs, newer lightx2v LoRAs, ~4 GB). Wan 2.2 video was added 09-29 (~73 GB: SmoothMix T2V + I2V high/low, umt5, wan_2.1_vae,
+- **Models:** `models.txt` is ~232 GB (10-19: +MiniMax H3, ~69 GB; 10-18: +RIFE/FILM, Anime Style v2 LoRAs, newer lightx2v LoRAs, ~4 GB). Wan 2.2 video was added 09-29 (~73 GB: SmoothMix T2V + I2V high/low, umt5, wan_2.1_vae,
   lightx2v 4-step LoRAs, 3 fast upscalers). Before that it was ~87 GB, including Anima (Turbo + Aesthetic, in
   `diffusion_models`), Pony Realism v2.2, Mature Citron IL Unstable 3.0 and the Illustrious set.
 - **Workflows** (all five run; times measured on a B200): Anima Turbo (5 s), Anima Aesthetic (11 s),
