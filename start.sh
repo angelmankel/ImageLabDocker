@@ -264,8 +264,11 @@ if [ "${SKIP_LLM:-0}" != 1 ]; then
         rm -rf "$LLM_DIR/dist" && mv "$LLM_DIR/dist.new" "$LLM_DIR/dist" && echo "$OLLAMA_VERSION" > "$LLM_DIR/.version"
       fi
     fi
+    # Context capped: left alone, Ollama sizes it from the VRAM (262144 on an H200), and that KV
+    # cache is memory the two ComfyUIs need. Prompt helpers never come close to 16k.
     export OLLAMA_HOST=127.0.0.1:$LLM_PORT OLLAMA_MODELS=$LLM_DIR/models OLLAMA_ORIGINS='*' \
-      OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-10m}
+      OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-10m} \
+      OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH:-16384}
     [ -z "$LLM_CUDA" ] || export "$LLM_CUDA"   # its GPU, from "GPU layout" above
     while [ -x "$LLM_DIR/dist/bin/ollama" ]; do
       "$LLM_DIR/dist/bin/ollama" serve
