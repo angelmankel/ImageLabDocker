@@ -273,6 +273,17 @@ format/codec are a `COMFY_DYNAMICCOMBO_V3` input that ImageLab's converter canno
 **GGUF models** (quantized, e.g. CivitAI Wan mixes) load through ComfyUI-GGUF's `UnetLoaderGGUF` (pinned in the
 Dockerfile). ImageLabCore saves them as `.gguf` in `diffusion_models`; ImageLab picks the loader by extension.
 
+**Video add-ons (2026-10-18).** ImageLab's Video mode wires these as optional steps, all off by default, and
+none needed a new custom node: ComfyUI v0.34.5 already carries RIFE / FILM frame interpolation
+(`FrameInterpolationModelLoader` + `FrameInterpolate`, weights in `models/frame_interpolation`, PR 13258),
+`CFGZeroStar`, `EasyCache`, `TorchCompileModel`, `WanContextWindowsManual` and `WanFirstLastFrameToVideo`;
+the pinned KJNodes has `WanVideoNAG` (a negative prompt that works at CFG 1) and `ColorMatchV2`. `models.txt`
+got the four Comfy-Org RIFE/FILM files (~137 MB), the Anime Style v2 Wan 2.2 LoRA pairs (4 × 153 MB) and
+the newer lightx2v I2V 260412 / T2V Seko V2.0 speed LoRAs (~3.7 GB). Not added, on purpose: SageAttention
+(no cp311 / sm_100 wheel for torch 2.8 cu128 — a source build in the image), SeedVR2 (6.8 GB model, Python 3.12+
+tested only), Fun Camera / VACE 2.2 experts (15–17 GB each), GIMM-VFI (needs cupy). None of the new graph
+steps has run on a pod yet; the first run of each is the test.
+
 Anima is a diffusion model only: `UNETLoader` from `diffusion_models`, with
 `CLIPLoader` (`qwen_3_06b_base`, type `stable_diffusion`) and `VAELoader` (`qwen_image_vae`).
 
@@ -314,7 +325,7 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
 - **The image** is `ghcr.io/angelmankel/imagelab-pod:latest`, public, built by Actions from `main`.
   It carries ImageLab and ImageLabCore at the pins in the `Dockerfile` and the files in
   `workflows/` (five tested, five reference ones not yet rendered).
-- **Models:** `models.txt` is ~159 GB. Wan 2.2 video was added 09-29 (~73 GB: SmoothMix T2V + I2V high/low, umt5, wan_2.1_vae,
+- **Models:** `models.txt` is ~163 GB (10-18: +RIFE/FILM, Anime Style v2 LoRAs, newer lightx2v LoRAs, ~4 GB). Wan 2.2 video was added 09-29 (~73 GB: SmoothMix T2V + I2V high/low, umt5, wan_2.1_vae,
   lightx2v 4-step LoRAs, 3 fast upscalers). Before that it was ~87 GB, including Anima (Turbo + Aesthetic, in
   `diffusion_models`), Pony Realism v2.2, Mature Citron IL Unstable 3.0 and the Illustrious set.
 - **Workflows** (all five run; times measured on a B200): Anima Turbo (5 s), Anima Aesthetic (11 s),
@@ -364,6 +375,11 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
     `/object_info` or not (`UltimateSDUpscale` does not declare one). A saved workflow therefore has
     an extra `"randomize"` in `widgets_values` after that seed. Anything reading widgets positionally
     has to expect it or every widget after the seed is read one slot off.
+13. **`SaveVideo`'s `format` is a dynamic combo (COMFY_DYNAMICCOMBO_V3).** In an API graph the chosen option's
+    nested inputs travel as dotted keys: `format: "mp4"`, `format.codec: "h264"`, `format.codec.encoding:
+    "re-encode"`, `format.codec.encoding.crf: 18` (`_io.py` `finalize_prefix` / `build_nested_inputs`). A nested
+    input that is absent is simply not registered, so the plain `format: "mp4", codec: "h264"` pair (the hidden
+    top-level `codec`) stays valid. Derived from the v0.34.5 source, not yet run.
 12. **A pod's basic auth is one user.** A browser or proxy that still sends an older name gets 401 on
     every request, and the page hangs with no login box. `COMFY_AUTH_ALIASES` is the escape hatch.
 
