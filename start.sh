@@ -5,6 +5,7 @@ MODELS_DIR=${MODELS_DIR:-/workspace/ComfyUI/models}
 COMFY_PORT=${COMFY_PORT:-8189}
 PROXY_PORT=${PROXY_PORT:-8188}
 APP_PORT=${IMAGELAB_APP_PORT:-8190}
+LLM_PORT=${LLM_PORT:-11434}
 COMFY_AUTH_USER=${COMFY_AUTH_USER:-imagelab}
 COMFY_ARGS=${COMFY_ARGS:-}
 
@@ -81,7 +82,7 @@ printf '%s:%s\n' "$COMFY_AUTH_USER" "$(openssl passwd -apr1 "$COMFY_AUTH_TOKEN")
 for alias in ${COMFY_AUTH_ALIASES:-}; do
   printf '%s:%s\n' "$alias" "$(openssl passwd -apr1 "$COMFY_AUTH_TOKEN")" >> /tmp/htpasswd
 done
-sed -e "s/\${PROXY_PORT}/$PROXY_PORT/g" -e "s/\${COMFY_PORT}/$COMFY_PORT/g" -e "s/\${APP_PORT}/$APP_PORT/g" /opt/imagelab/nginx.conf.template > /tmp/nginx.conf
+sed -e "s/\${PROXY_PORT}/$PROXY_PORT/g" -e "s/\${COMFY_PORT}/$COMFY_PORT/g" -e "s/\${APP_PORT}/$APP_PORT/g" -e "s/\${LLM_PORT}/$LLM_PORT/g" /opt/imagelab/nginx.conf.template > /tmp/nginx.conf
 
 # Check the generated config before trusting it. nginx is the only way in — ComfyUI, ImageLab and
 # the log endpoints all sit behind it — so a config it refuses would leave a running, billing pod
@@ -142,6 +143,39 @@ if [ "${SKIP_MODEL_DOWNLOAD:-0}" != 1 ]; then
     done
     echo "[models] ===== GAVE UP after ${DOWNLOAD_ATTEMPTS:-20} attempts ====="
   ) 2>&1 | tee -a "$LOG_DIR/download.log" &
+fi
+
+# ---- the pod's own LLM server (Ollama), served at /llm/ ------------------------------------------
+# An optional second AI server for ImageLab, beside the LAN one (winold): the pod has the VRAM. The
+# 1.4 GB release goes onto the volume once per version rather than into the image, so the image
+# pull stays fast and a stop keeps it; models live on the volume too. Ollama takes no VRAM until a
+# model is used, and lets it go after OLLAMA_KEEP_ALIVE. SKIP_LLM=1 turns it off. Log:
+# /pod/logs/llm.log.
+OLLAMA_VERSION=${OLLAMA_VERSION:-0.40.6}
+LLM_DIR=/workspace/ollama
+if [ "${SKIP_LLM:-0}" != 1 ]; then
+  (
+    set +e
+    if [ "$(cat "$LLM_DIR/.version" 2>/dev/null)" != "$OLLAMA_VERSION" ]; then
+      echo "installing Ollama $OLLAMA_VERSION"
+      rm -rf "$LLM_DIR/dist.new" && mkdir -p "$LLM_DIR/dist.new"
+      for attempt in 1 2 3 4 5; do
+        curl -fsSL "https://github.com/ollama/ollama/releases/download/v$OLLAMA_VERSION/ollama-linux-amd64.tar.zst" \
+          | tar --zstd -x -C "$LLM_DIR/dist.new" && break
+        echo "download attempt $attempt failed; retrying in 20s"; sleep 20
+      done
+      if [ -x "$LLM_DIR/dist.new/bin/ollama" ]; then
+        rm -rf "$LLM_DIR/dist" && mv "$LLM_DIR/dist.new" "$LLM_DIR/dist" && echo "$OLLAMA_VERSION" > "$LLM_DIR/.version"
+      fi
+    fi
+    export OLLAMA_HOST=127.0.0.1:$LLM_PORT OLLAMA_MODELS=$LLM_DIR/models OLLAMA_ORIGINS='*' \
+      OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-10m}
+    while [ -x "$LLM_DIR/dist/bin/ollama" ]; do
+      "$LLM_DIR/dist/bin/ollama" serve
+      echo "ollama exited ($?); restarting in 5s"; sleep 5
+    done
+    echo "no Ollama binary; /llm/ stays down"
+  ) 2>&1 | tee -a "$LOG_DIR/llm.log" | sed -u 's/^/[llm] /' &
 fi
 
 # ---- the live app on the volume (hot reload; only this supervisor is baked) ----------------------

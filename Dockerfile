@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y --no-install-recommends \
         python3.11 python3.11-venv python3.11-dev \
-        git aria2 nginx-light openssl build-essential \
+        git aria2 nginx-light openssl build-essential zstd \
         libgl1 libglib2.0-0 libgomp1 libsm6 libxext6 \
     && rm -rf /var/lib/apt/lists/* \
     && python3.11 -m venv /opt/venv \
@@ -82,8 +82,8 @@ COPY workflows /opt/imagelab/workflows
 # The built dist/ is cloned at a pin. dist/ is committed there precisely so this needs no npm in the image build. What lands here is
 # only the seed: scripts/push.sh replaces it on a running pod without a rebuild.
 RUN git clone --depth 1 https://github.com/angelmankel/ImageLab /tmp/imagelab \
-    && git -C /tmp/imagelab fetch --depth 1 origin 5b76786851782d8d8f1e01a6b1953eb380f7465a \
-    && git -C /tmp/imagelab checkout --quiet 5b76786851782d8d8f1e01a6b1953eb380f7465a \
+    && git -C /tmp/imagelab fetch --depth 1 origin 1a5d7aa55ce93a6862a08458e1d1caa33c18c06e \
+    && git -C /tmp/imagelab checkout --quiet 1a5d7aa55ce93a6862a08458e1d1caa33c18c06e \
     && mkdir -p /opt/imagelab/app/lab \
     && cp -a /tmp/imagelab/dist/. /opt/imagelab/app/lab/ \
     && rm -rf /tmp/imagelab
