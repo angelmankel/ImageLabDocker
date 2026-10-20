@@ -82,8 +82,8 @@ COPY workflows /opt/imagelab/workflows
 # The built dist/ is cloned at a pin. dist/ is committed there precisely so this needs no npm in the image build. What lands here is
 # only the seed: scripts/push.sh replaces it on a running pod without a rebuild.
 RUN git clone --depth 1 https://github.com/angelmankel/ImageLab /tmp/imagelab \
-    && git -C /tmp/imagelab fetch --depth 1 origin dcbc7e9123111f1e0760a3b1a6450f0b3d46eb14 \
-    && git -C /tmp/imagelab checkout --quiet dcbc7e9123111f1e0760a3b1a6450f0b3d46eb14 \
+    && git -C /tmp/imagelab fetch --depth 1 origin a99f9fecc1a2a886c25438dac11c1e2fc22793f7 \
+    && git -C /tmp/imagelab checkout --quiet a99f9fecc1a2a886c25438dac11c1e2fc22793f7 \
     && mkdir -p /opt/imagelab/app/lab \
     && cp -a /tmp/imagelab/dist/. /opt/imagelab/app/lab/ \
     && mkdir -p /opt/imagelab/app/lab/next \
