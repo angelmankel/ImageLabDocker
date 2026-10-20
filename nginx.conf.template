@@ -19,6 +19,7 @@ http {
   # (saving a workflow) would arrive as a path it has no route for.
   map $request_uri $video_comfy_uri { ~^/video-comfy(?<rest>/.*)$ $rest; default /; }
   server {
+    absolute_redirect off;
     listen 0.0.0.0:${PROXY_PORT};
     auth_basic "imagelab";
     auth_basic_user_file /tmp/htpasswd;
@@ -59,6 +60,9 @@ http {
       add_header Cache-Control "no-cache" always;
     }
     location = /imagelab { return 301 /imagelab/; }
+    # The next UI lives under lab/next/. Without the slash nginx would redirect to the inside
+    # port (8188), which the phone cannot reach; relative redirects keep the public host.
+    location = /imagelab/next { return 301 /imagelab/next/; }
     # ImageLabCore's API is a ComfyUI route. The longer prefix wins over /imagelab/ above.
     location /imagelab/api/ {
       proxy_pass http://127.0.0.1:${COMFY_PORT};
