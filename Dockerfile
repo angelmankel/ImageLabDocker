@@ -58,6 +58,15 @@ RUN touch /opt/ComfyUI/custom_nodes/skip_download_model \
     && install-node https://github.com/yolain/ComfyUI-Easy-Use                 271685698b0935c5b0ecca86a58c3817931cd205 ComfyUI-Easy-Use \
     && install-node https://github.com/city96/ComfyUI-GGUF                     6ea2651e7df66d7585f6ffee804b20e92fb38b8a ComfyUI-GGUF
 
+# ---- Face packs for ImageLab's Style tab (Face: InstantID / PuLID; FaceID is IPAdapter_plus above).
+#      insightface 0.7.3 builds from source here (build-essential is in the image); the onnxruntime
+#      re-assert below then puts the GPU provider back over the CPU onnxruntime they pull in.
+#      PuLID downloads EVA02-CLIP and facexlib's weights on its first run (slow once).
+RUN pip install "insightface==0.7.3" \
+    && install-node https://github.com/cubiq/ComfyUI_InstantID                 72495e806bc2ab9c41581e15ccaa1bcf83c477e8 ComfyUI_InstantID \
+    && install-node https://github.com/cubiq/PuLID_ComfyUI                     93e0c4c226b87b23c0009d671978bad0e77289ff PuLID_ComfyUI \
+    && python -c "import insightface; print('insightface', insightface.__version__)"
+
 # Re-assert the CUDA torch build and the GPU onnxruntime (several packs pull the CPU 'onnxruntime',
 # which shadows onnxruntime-gpu's providers), then prove CUDA 12.8 + the GPU provider are what's left.
 RUN pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \

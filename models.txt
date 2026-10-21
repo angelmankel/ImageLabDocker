@@ -87,6 +87,32 @@ https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth	sams	sam_vi
 https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors	ipadapter	ip-adapter-plus_sdxl_vit-h.safetensors	847517512
 https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter_sdxl_vit-h.safetensors	ipadapter	ip-adapter_sdxl_vit-h.safetensors	698391064
 https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors	clip_vision	CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors	2528373448
+# --- ImageLab Style tab (2026-10-20): every reference type's files, picked by name (lib/styleRefs.ts pickModel / pickLora /
+#     pickControlnet). SD 1.5 + SDXL style / subject (PLUS), SD 1.5 composition (ostris), FaceID Plus v2 + its LoRAs, FaceID
+#     Portrait, InstantID (SDXL; its ControlNet in controlnet/instantid/, the name the pack's examples use) and its antelopev2
+#     face model, PuLID SDXL. buffalo_l (FaceID's face model) is fetched by insightface itself on first use. ~9.6 GB.
+https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus_sd15.safetensors	ipadapter	ip-adapter-plus_sd15.safetensors	98183288
+https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter_sd15.safetensors	ipadapter	ip-adapter_sd15.safetensors	44642768
+https://huggingface.co/ostris/ip-composition-adapter/resolve/main/ip_plus_composition_sd15.safetensors	ipadapter	ip_plus_composition_sd15.safetensors	98183728
+https://huggingface.co/ostris/ip-composition-adapter/resolve/main/ip_plus_composition_sdxl.safetensors	ipadapter	ip_plus_composition_sdxl.safetensors	847517960
+https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sd15.bin	ipadapter	ip-adapter-faceid-plusv2_sd15.bin	156558509
+https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sdxl.bin	ipadapter	ip-adapter-faceid-plusv2_sdxl.bin	1487555181
+https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-portrait_sdxl.bin	ipadapter	ip-adapter-faceid-portrait_sdxl.bin	749822515
+https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-portrait-v11_sd15.bin	ipadapter	ip-adapter-faceid-portrait-v11_sd15.bin	64586623
+https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sd15_lora.safetensors	loras	ip-adapter-faceid-plusv2_sd15_lora.safetensors	51059544
+https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sdxl_lora.safetensors	loras	ip-adapter-faceid-plusv2_sdxl_lora.safetensors	371842896
+https://huggingface.co/InstantX/InstantID/resolve/main/ip-adapter.bin	instantid	ip-adapter.bin	1691134141
+https://huggingface.co/InstantX/InstantID/resolve/main/ControlNetModel/diffusion_pytorch_model.safetensors	controlnet/instantid	diffusion_pytorch_model.safetensors	2502139136
+https://huggingface.co/DIAMONIK7777/antelopev2/resolve/main/1k3d68.onnx	insightface/models/antelopev2	1k3d68.onnx	143607619
+https://huggingface.co/DIAMONIK7777/antelopev2/resolve/main/2d106det.onnx	insightface/models/antelopev2	2d106det.onnx	5030888
+https://huggingface.co/DIAMONIK7777/antelopev2/resolve/main/genderage.onnx	insightface/models/antelopev2	genderage.onnx	1322532
+https://huggingface.co/DIAMONIK7777/antelopev2/resolve/main/glintr100.onnx	insightface/models/antelopev2	glintr100.onnx	260665334
+https://huggingface.co/DIAMONIK7777/antelopev2/resolve/main/scrfd_10g_bnkps.onnx	insightface/models/antelopev2	scrfd_10g_bnkps.onnx	16923827
+https://huggingface.co/huchenlei/ipadapter_pulid/resolve/main/ip-adapter_pulid_sdxl_fp16.safetensors	pulid	ip-adapter_pulid_sdxl_fp16.safetensors	791372856
+# Flux Redux (Style tab, Flux models): the SigLIP vision model is public; flux1-redux-dev is gated on Hugging Face (401
+# without a token, and download-models.sh sends none), so it stays out until there is an ungated mirror or an HF token here.
+https://huggingface.co/Comfy-Org/sigclip_vision_384/resolve/main/sigclip_vision_patch14_384.safetensors	clip_vision	sigclip_vision_patch14_384.safetensors	856505640
+# https://huggingface.co/black-forest-labs/FLUX.1-Redux-dev/resolve/main/flux1-redux-dev.safetensors	style_models	flux1-redux-dev.safetensors	129063232
 
 # --- WD14 tagger (the pack's models/ dir is symlinked to models/wd14_tagger by start.sh) ---
 https://huggingface.co/SmilingWolf/wd-v1-4-moat-tagger-v2/resolve/main/model.onnx	wd14_tagger	wd-v1-4-moat-tagger-v2.onnx	326197340
