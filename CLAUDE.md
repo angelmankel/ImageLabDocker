@@ -4,7 +4,25 @@
 
 ## The project
 
-Three repos, all on GitHub, kept side by side locally in `~/Github/ImageLabProject/`:
+Every ImageLab repo lives on Gitea now (single source of truth since 2026-10-21), side by side
+locally in `~/Github/ImageLabProject/`. The local folder names are the old GitHub names:
+
+| Local folder | Gitea repo |
+|---|---|
+| `ImageLabDocker` | `donny/imagelab-docker` |
+| `ImageLabCore` | `donny/imagelab-core` |
+| `ImageLab` | `donny/imagelab-prototype` (the current app; `imagelab-web` replaces it) |
+| `imagelab-server` | `donny/imagelab-server` (new, planning: `docs/plan.md`) |
+| `imagelab-web` | `donny/imagelab-web` (new, planning: `docs/plan.md`) |
+
+**`git push` goes to Gitea and GitHub at once** in the first three (`origin` has two push URLs;
+`github` is the old remote, fetch only). GitHub still builds the pod image through Actions, so it
+stays in sync until the image builds move to Gitea; after that Donny makes the GitHub repos private.
+The old Gitea repos (ImageLab, ImageLabV3, imagelab-gpu, imagelab-studio, imagelab-runpod,
+imagelab-runpod-provisioning, imagelab_studio_extension, imagelab_v3_extension, Luminary) are
+**archived**: read-only, still cloneable for reference.
+
+The three repos that make the pod today:
 
 | | | |
 |---|---|---|
