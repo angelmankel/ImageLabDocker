@@ -80,7 +80,7 @@ RUN pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
 # This is what answers /imagelab/api/hashes, /imagelab/api/downloads and /imagelab/api/favorites. Without it
 # the app cannot ask a server what models it has, and the model browser shows nothing. Pinned like
 # every other pack above.
-RUN install-node https://github.com/angelmankel/ImageLabCore 5b6deab7573ca60f44c804cd17b86df500db4739 ImageLabCore
+RUN install-node https://github.com/angelmankel/ImageLabCore 066c793d77f14d51fb441157598a48d687cabfa5 ImageLabCore
 
 # ---- Runtime files --------------------------------------------------------------
 COPY models.txt download-models.sh start.sh nginx.conf.template live.py /opt/imagelab/
