@@ -16,6 +16,7 @@ on:
       - agent.sh
       - nginx.conf.template
       - live.py
+      - patches/**
       - app/**
       - .github/workflows/build.yml
   workflow_dispatch:

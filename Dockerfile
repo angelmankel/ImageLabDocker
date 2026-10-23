@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y --no-install-recommends \
         python3.11 python3.11-venv python3.11-dev \
         git aria2 nginx-light openssl build-essential zstd \
-        libgl1 libglib2.0-0 libgomp1 libsm6 libxext6 \
+        libgl1 libegl1 libglib2.0-0 libgomp1 libsm6 libxext6 \
     && rm -rf /var/lib/apt/lists/* \
     && python3.11 -m venv /opt/venv \
     && pip install --upgrade pip wheel setuptools
@@ -84,8 +84,24 @@ RUN install-node https://github.com/mav-rik/facerestore_cf                 ff4d7
 # ---- Map Maker (duel-maps) on the shared worker. Its TRELLIS.2 and LoadBackgroundRemovalModel / RemoveBackground
 #      nodes are ComfyUI's own (v0.35+); these two packs are the rest. UltraTex (mesh texturing) pulls trimesh,
 #      moderngl, xatlas and scipy; seamless-tiling (SeamlessTile, CircularVAEDecode) needs nothing.
+#      UltraTex renders with moderngl, whose standalone context needs X; workers are headless, so
+#      patches/ultratex-egl.patch makes it use EGL when DISPLAY is unset (libegl1 above; the NVIDIA EGL
+#      vendor library is mounted by the container toolkit because of the 'graphics' capability below, but
+#      its glvnd vendor file is not, so the image ships 10_nvidia.json: without it EGL picks Mesa's
+#      llvmpipe; on a host without libEGL_nvidia glvnd skips it and still falls back to Mesa).
+#      triton comes with torch 2.8.0 (triton==3.4.0), so nothing extra is installed for it.
+COPY patches/ultratex-egl.patch /tmp/ultratex-egl.patch
 RUN install-node https://github.com/visualbruno/ComfyUI-UltraTex             8137da52ed8352305cb7825b39c36a250bf2507a ComfyUI-UltraTex \
-    && install-node https://github.com/spinagon/ComfyUI-seamless-tiling     9225ed5d2293c8cad25a11385ffe681e9b349f14 ComfyUI-seamless-tiling
+    && install-node https://github.com/spinagon/ComfyUI-seamless-tiling     9225ed5d2293c8cad25a11385ffe681e9b349f14 ComfyUI-seamless-tiling \
+    && patch -p1 -d /opt/ComfyUI/custom_nodes/ComfyUI-UltraTex < /tmp/ultratex-egl.patch \
+    && grep -q 'backend="egl"' /opt/ComfyUI/custom_nodes/ComfyUI-UltraTex/ultratex_core/render.py \
+    && python -m py_compile /opt/ComfyUI/custom_nodes/ComfyUI-UltraTex/ultratex_core/render.py \
+    && python -c "from ctypes.util import find_library as f; import sys; print('EGL', f('EGL'), 'GL', f('GL')); sys.exit(0 if f('EGL') and f('GL') else 1)" \
+    && rm /tmp/ultratex-egl.patch \
+    && mkdir -p /usr/share/glvnd/egl_vendor.d \
+    && printf '{"file_format_version": "1.0.0", "ICD": {"library_path": "libEGL_nvidia.so.0"}}\n' \
+        > /usr/share/glvnd/egl_vendor.d/10_nvidia.json \
+    && python -c "import json; print(json.load(open('/usr/share/glvnd/egl_vendor.d/10_nvidia.json')))"
 
 # Re-assert the CUDA torch build and the GPU onnxruntime (several packs pull the CPU 'onnxruntime',
 # which shadows onnxruntime-gpu's providers), then prove CUDA 12.8 + the GPU provider are what's left.
@@ -145,7 +161,8 @@ ENV MODELS_DIR=/workspace/ComfyUI/models \
     IMAGELAB_APP_PORT=8190 \
     COMFY_PORT=8189 \
     PROXY_PORT=8188 \
-    COMFY_AUTH_USER=imagelab
+    COMFY_AUTH_USER=imagelab \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
 
 EXPOSE 8188
 WORKDIR /opt/ComfyUI

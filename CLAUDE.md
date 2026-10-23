@@ -278,6 +278,27 @@ are refused, restart is ComfyUI-Manager's soft reboot); `COMFY_INPUT_DIR=/worksp
 most), then runs in a restart loop. `WORKER_COST_PER_HOUR` / `_2` go to the server as the
 worker's cost.
 
+## Host setup for a GPU worker (gpu-server, any new box)
+
+UltraTex (Map Maker's texture nodes) and later Blender render with OpenGL through EGL, headless
+(imagelab-server #178). The image brings `libegl1` and sets
+`NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics`; the NVIDIA container toolkit then mounts the
+host's `libEGL_nvidia` into the container (not its glvnd vendor file, so the image ships
+`/usr/share/glvnd/egl_vendor.d/10_nvidia.json` itself; without it EGL silently picks Mesa's
+`llvmpipe`, on the CPU). A host with only the compute driver has no such library
+and every GL context fails (`libEGL.so not loaded` / `eglGetDisplay`). So a self-hosted worker needs:
+
+- the driver (gpu-server: `nvidia-headless-no-dkms-595-open`, 595.99.02) **plus its GL/EGL userspace
+  at exactly the same version**: `sudo apt-get install --no-install-recommends libnvidia-gl-595=<driver version>`
+  (check with `dpkg -l | grep nvidia` and `ls /usr/lib/x86_64-linux-gnu/libEGL_nvidia*`; never let
+  it move the driver itself);
+- `nvidia-container-toolkit`; nothing in compose is required (the image's env carries `graphics`),
+  imagelab-server's `deploy/gpu-server/compose.yaml` sets it on the `imagelab` service anyway.
+- Check, in the container: `python -c "import moderngl; c = moderngl.create_context(standalone=True, require=330, backend='egl'); print(c.info['GL_RENDERER'])"`
+  prints the NVIDIA card. RunPod hosts ship the full driver, so pods need nothing.
+
+Details and the checklist: imagelab-server `docs/workers.md`, "Host setup for a GPU worker".
+
 ## Changing code on a running pod
 
 Neither needs an image rebuild.

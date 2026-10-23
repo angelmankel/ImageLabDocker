@@ -1,0 +1,21 @@
+diff --git a/ultratex_core/render.py b/ultratex_core/render.py
+index 9662e8d..9fe11b9 100644
+--- a/ultratex_core/render.py
++++ b/ultratex_core/render.py
+@@ -160,9 +160,15 @@ _CTX = None
+ def _context():
+     global _CTX
+     if _CTX is None:
++        import os
++
+         import moderngl
+ 
+-        _CTX = moderngl.create_standalone_context(require=330)
++        # Headless workers have no X display: use the driver's EGL backend there (ImageLab #178).
++        if os.environ.get("DISPLAY"):
++            _CTX = moderngl.create_standalone_context(require=330)
++        else:
++            _CTX = moderngl.create_context(standalone=True, require=330, backend="egl")
+     return _CTX
+ 
+ 
