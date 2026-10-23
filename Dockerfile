@@ -1,5 +1,14 @@
 # ComfyUI image for ImageLab (RTX 5090 / Blackwell ready).
 # CUDA 12.8 + torch 2.8.0 cu128 wheels; ComfyUI and every custom node pinned to a commit.
+
+# The ImageLab worker agent (imagelab-server apps/agent), pinned to the imagelab-server commit its
+# image was built from. That image is the compiled single executable on a small Debian; only the
+# executable is taken. The registry is public (anonymous pull), so the build needs no login.
+# Move the pin to a sha whose imagelab-server "Image" run (job agent-image) is green and that
+# matches what the server runs.
+ARG IMAGELAB_AGENT_TAG=2cc8b4c
+FROM gitea.dev.blueoceanswim.com/donny/imagelab-agent:${IMAGELAB_AGENT_TAG} AS agent
+
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -95,7 +104,7 @@ print('facerestore_cf', sorted(m.NODE_CLASS_MAPPINGS)); sys.exit(0 if need <= se
 RUN install-node https://github.com/angelmankel/ImageLabCore 066c793d77f14d51fb441157598a48d687cabfa5 ImageLabCore
 
 # ---- Runtime files --------------------------------------------------------------
-COPY models.txt download-models.sh start.sh nginx.conf.template live.py /opt/imagelab/
+COPY models.txt download-models.sh start.sh agent.sh nginx.conf.template live.py /opt/imagelab/
 COPY app /opt/imagelab/app
 COPY workflows /opt/imagelab/workflows
 
@@ -110,7 +119,12 @@ RUN git clone --depth 1 https://github.com/angelmankel/ImageLab /tmp/imagelab \
     && mkdir -p /opt/imagelab/app/lab/next \
     && cp -a /tmp/imagelab/next/dist/. /opt/imagelab/app/lab/next/ \
     && rm -rf /tmp/imagelab
-RUN chmod +x /opt/imagelab/download-models.sh /opt/imagelab/start.sh
+RUN chmod +x /opt/imagelab/download-models.sh /opt/imagelab/start.sh /opt/imagelab/agent.sh
+
+# The agent runs only when the pod env names a server and a worker token (agent.sh). --version
+# proves the executable runs on this base (glibc, CA roots) at build time, not on a billing pod.
+COPY --from=agent /usr/local/bin/imagelab-agent /usr/local/bin/imagelab-agent
+RUN /usr/local/bin/imagelab-agent --version
 
 ENV MODELS_DIR=/workspace/ComfyUI/models \
     IMAGELAB_APP_DIR=/workspace/imagelab-app \

@@ -10,6 +10,7 @@ on:
       - models.txt
       - download-models.sh
       - start.sh
+      - agent.sh
       - nginx.conf.template
       - live.py
       - app/**

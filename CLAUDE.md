@@ -102,7 +102,9 @@ curl -s https://api.runpod.io/graphql -H "Authorization: Bearer $RUNPOD_API_KEY"
     ports: \\\"8188/tcp\\\",
     env: [{ key: \\\"CIVITAI_API_KEY\\\", value: \\\"$CIVITAI_API_KEY\\\" },
           { key: \\\"COMFY_AUTH_USER\\\", value: \\\"$COMFY_LOCAL_USER\\\" },
-          { key: \\\"COMFY_AUTH_TOKEN\\\", value: \\\"$COMFY_LOCAL_TOKEN\\\" }]
+          { key: \\\"COMFY_AUTH_TOKEN\\\", value: \\\"$COMFY_LOCAL_TOKEN\\\" },
+          { key: \\\"IMAGELAB_SERVER_URL\\\", value: \\\"wss://lab.blueoceanswim.com/agent\\\" },
+          { key: \\\"IMAGELAB_WORKER_TOKEN\\\", value: \\\"$IMAGELAB_POD_WORKER_TOKEN\\\" }]
   }) { id costPerHr machine { gpuDisplayName location } } }\"}" | jq -c .
 ```
 
@@ -118,6 +120,12 @@ curl -s https://api.runpod.io/graphql -H "Authorization: Bearer $RUNPOD_API_KEY"
   Traefik login keeps working. The image defaults the user to `imagelab`.
 - `COMFY_AUTH_ALIASES` (optional, space-separated) adds more user names with the same password, for
   a browser that still sends an older one. Add `{ key: \\\"COMFY_AUTH_ALIASES\\\", value: \\\"name\\\" }` to `env`.
+- `IMAGELAB_SERVER_URL` + `IMAGELAB_WORKER_TOKEN` make the pod a worker of the ImageLab server
+  (*The ImageLab agent* below): the pod then needs no Traefik route for lab. Leave both out for a
+  pod used on its own. The token is the pod's own worker token (`worker:create`, see
+  imagelab-server `docs/workers.md`), never gpu-server's or winold's. A second ComfyUI (2+ GPUs or
+  ≥ 80 GB) is a second worker only with `IMAGELAB_WORKER_TOKEN_2`. Optional:
+  `WORKER_COST_PER_HOUR` (and `_2`), `AGENT_LOG_LEVEL`.
 
 **Or from the RunPod console:** the private template **ImageLab Pod** (`63ya3ikzof`) has the image,
 disks, port and env already set, including the secrets. Pick Secure Cloud and a US GPU. If
@@ -152,6 +160,7 @@ direct `ip:port` answers 200 means that and nothing else.
 | `/video-comfy/` | a **second ComfyUI, for video**, on 127.0.0.1:8191 (`COMFY_VIDEO_PORT`). nginx strips the prefix; websockets, basic auth and proxy settings as for `/`. On by default with 2+ GPUs (it gets its own card) or one GPU of ≥ 80 GB (shared); `COMFY_VIDEO=1/0` forces it. 502 when it is off or still starting. See *The second ComfyUI* below. Log: `/pod/logs/comfy-video.log` |
 | `/video-comfy/imagelab/api/*` | goes to the **first** ComfyUI (one owner for the hash index and downloads), except `/video-comfy/imagelab/api/favorites*`, which the second serves itself (a favorite is copied out of *its* temp/) |
 | `/pod/logs/instances.json` | what `start.sh` launched at boot (configuration, not liveness), e.g. `{"instances": 2, "gpus": 2, "mode": "separate", "image": {"path": "/", "gpu": 0, "vram_gb": null}, "video": {"path": "/video-comfy/", "gpu": 1, "vram_gb": null}, "llm": {"path": "/llm/", "gpu": 0}}`. `mode` is `single` (one ComfyUI), `shared` (two on one card; `vram_gb` = each one's share) or `separate`; `video` / `llm` are `null` when off; `gpu` is an nvidia-smi index, `null` when unknown |
+| `/pod/logs/agent.log` | the ImageLab agent (`agent-2.log` for the second ComfyUI's); absent when the pod env has no `IMAGELAB_SERVER_URL` / `IMAGELAB_WORKER_TOKEN` |
 | `/pod/logs/download.log` | model download progress |
 | `/pod/logs/models-complete` | 200 once every model has landed |
 
@@ -240,6 +249,33 @@ Caveats, none of them tried on a pod yet:
 - The ComfyUI editor at `/video-comfy/` should work: frontend 1.49.6 loads `./assets/…` and takes its
   API base from `location.pathname`. nginx cuts the prefix from the raw request line (a `map` on
   `$request_uri`), so an encoded `%2F` in `/api/userdata/workflows%2F…` survives.
+
+## The ImageLab agent
+
+The image carries the ImageLab worker agent (`/usr/local/bin/imagelab-agent`, imagelab-server
+`apps/agent`), pinned in the `Dockerfile` (`IMAGELAB_AGENT_TAG`, an imagelab-server commit; the
+executable is copied out of `gitea.dev.blueoceanswim.com/donny/imagelab-agent:<tag>`, a public
+image). `start.sh` hands it to `agent.sh`, which starts it only when the pod env has both
+`IMAGELAB_SERVER_URL` and `IMAGELAB_WORKER_TOKEN`; otherwise it logs `[agent] off` and nothing runs.
+gpu-server runs this same image without those two and keeps its own agent beside it, so it never
+gets a second one.
+
+The agent connects OUT to the server's websocket, so a pod is a lab worker with no port, no
+Traefik route and no repointing after a resume. Per ComfyUI that `start.sh` launched, one agent:
+
+| | first ComfyUI | second ComfyUI (when on) |
+|---|---|---|
+| token | `IMAGELAB_WORKER_TOKEN` | `IMAGELAB_WORKER_TOKEN_2` (no agent without it) |
+| `COMFY_URL` | `http://127.0.0.1:$COMFY_PORT` | `http://127.0.0.1:$COMFY_VIDEO_PORT` |
+| Ollama | the pod's (`off` with `SKIP_LLM=1`) | `off` (one Ollama, one worker reports it) |
+| log | `/pod/logs/agent.log` | `/pod/logs/agent-2.log` |
+
+Both: straight to ComfyUI on loopback, so no basic auth (`COMFY_AUTH_*` are unset for the agent);
+`COMFY_CONTROL=attach` + `WORKER_POD=1` (image-managed: the server's update / install-node actions
+are refused, restart is ComfyUI-Manager's soft reboot); `COMFY_INPUT_DIR=/workspace/ComfyUI/input`
+(job inputs deleted after each job). Each waits until its ComfyUI answers `/system_stats` (10 min at
+most), then runs in a restart loop. `WORKER_COST_PER_HOUR` / `_2` go to the server as the
+worker's cost.
 
 ## Changing code on a running pod
 

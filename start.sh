@@ -325,5 +325,12 @@ else
     | tee -a "$LOG_DIR/comfy-video.log"
 fi
 
+# ---- the ImageLab agent: this pod as a worker of the ImageLab server ------------------------------
+# Only with IMAGELAB_SERVER_URL + IMAGELAB_WORKER_TOKEN in the pod env (agent.sh says "off" without
+# them; gpu-server runs this image with its own agent beside it). One agent per ComfyUI above, each
+# waits for its ComfyUI. Logs: /pod/logs/agent.log (and agent-2.log for the second ComfyUI).
+LOG_DIR="$LOG_DIR" LLM_PORT="$LLM_PORT" /opt/imagelab/agent.sh "$COMFY_PORT" \
+  $([ "$VIDEO_ON" = 1 ] && echo "$VIDEO_PORT") &
+
 echo "[start] ComfyUI $(cat .pinned-commit 2>/dev/null) on 127.0.0.1:$COMFY_PORT ${IMAGE_CUDA} ${IMAGE_VRAM_ARGS}"
 exec env $IMAGE_CUDA python main.py --listen 127.0.0.1 --port "$COMFY_PORT" --preview-method taesd $IMAGE_VRAM_ARGS $COMFY_ARGS
