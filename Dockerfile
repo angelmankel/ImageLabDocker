@@ -101,7 +101,7 @@ print('facerestore_cf', sorted(m.NODE_CLASS_MAPPINGS)); sys.exit(0 if need <= se
 # This is what answers /imagelab/api/hashes, /imagelab/api/downloads and /imagelab/api/favorites. Without it
 # the app cannot ask a server what models it has, and the model browser shows nothing. Pinned like
 # every other pack above.
-RUN install-node https://github.com/angelmankel/ImageLabCore 066c793d77f14d51fb441157598a48d687cabfa5 ImageLabCore
+RUN install-node https://github.com/angelmankel/ImageLabCore 77a694fce47b11cdf24cd9fb1c551e0a42729bf6 ImageLabCore
 
 # ---- Runtime files --------------------------------------------------------------
 COPY models.txt download-models.sh start.sh agent.sh nginx.conf.template live.py /opt/imagelab/
