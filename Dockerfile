@@ -33,7 +33,7 @@ RUN pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
         --index-url https://download.pytorch.org/whl/cu128
 
 # ---- ComfyUI (pinned) -------------------------------------------------------
-ARG COMFYUI_REF=v0.34.5
+ARG COMFYUI_REF=v0.42.5
 RUN git clone --depth 1 --branch ${COMFYUI_REF} https://github.com/Comfy-Org/ComfyUI /opt/ComfyUI \
     && cd /opt/ComfyUI \
     && pip install -r requirements.txt \
@@ -81,6 +81,12 @@ RUN pip install "insightface==0.7.3" \
 #      add lpips and lmdb, which the vendored basicsr imports at load time. Its own layer keeps the insightface build cached.
 RUN install-node https://github.com/mav-rik/facerestore_cf                 ff4d7a5c102441d8f058dd6135797ffb57b6c6ad facerestore_cf
 
+# ---- Map Maker (duel-maps) on the shared worker. Its TRELLIS.2 and LoadBackgroundRemovalModel / RemoveBackground
+#      nodes are ComfyUI's own (v0.35+); these two packs are the rest. UltraTex (mesh texturing) pulls trimesh,
+#      moderngl, xatlas and scipy; seamless-tiling (SeamlessTile, CircularVAEDecode) needs nothing.
+RUN install-node https://github.com/visualbruno/ComfyUI-UltraTex             8137da52ed8352305cb7825b39c36a250bf2507a ComfyUI-UltraTex \
+    && install-node https://github.com/spinagon/ComfyUI-seamless-tiling     9225ed5d2293c8cad25a11385ffe681e9b349f14 ComfyUI-seamless-tiling
+
 # Re-assert the CUDA torch build and the GPU onnxruntime (several packs pull the CPU 'onnxruntime',
 # which shadows onnxruntime-gpu's providers), then prove CUDA 12.8 + the GPU provider are what's left.
 RUN pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
@@ -96,6 +102,13 @@ RUN cd /opt/ComfyUI && python -c "import sys; sys.path[:0] = ['/opt/ComfyUI', '/
 from comfy.cli_args import args; args.cpu = True; \
 import facerestore_cf as m; need = {'FaceRestoreModelLoader', 'FaceRestoreCFWithModel'}; \
 print('facerestore_cf', sorted(m.NODE_CLASS_MAPPINGS)); sys.exit(0 if need <= set(m.NODE_CLASS_MAPPINGS) else 1)"
+
+# Same proof for the Map Maker packs.
+RUN cd /opt/ComfyUI && python -c "import sys, importlib; sys.path[:0] = ['/opt/ComfyUI', '/opt/ComfyUI/custom_nodes']; \
+from comfy.cli_args import args; args.cpu = True; \
+need = {'ComfyUI-UltraTex': {'UltraTexPrep', 'UltraTexSampler', 'UltraTexBake'}, 'ComfyUI-seamless-tiling': {'SeamlessTile', 'CircularVAEDecode'}}; \
+got = {n: set(importlib.import_module(n).NODE_CLASS_MAPPINGS) for n in need}; print(got); \
+sys.exit(0 if all(need[n] <= got[n] for n in need) else 1)"
 
 # ---- ImageLabCore: the API the front end talks to ---------------------------------
 # This is what answers /imagelab/api/hashes, /imagelab/api/downloads and /imagelab/api/favorites. Without it
