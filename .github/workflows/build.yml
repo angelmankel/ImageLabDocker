@@ -2,7 +2,10 @@ name: build
 
 on:
   push:
-    branches: [main]
+    # main builds :latest (what gpu-server and every new pod pull). A test/** branch builds the
+    # same image as :<sha> and :<branch, '/' replaced by '-'> (test/comfy035 -> :test-comfy035), never
+    # :latest, so an image change can be tried on a worker before main moves.
+    branches: [main, 'test/**']
     # Only what goes into the image. A README or scripts/ edit is not worth a ten minute build.
     paths:
       - Dockerfile
@@ -45,12 +48,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Tags (main -> :latest + :<sha>; any other branch -> :<branch slug> + :<sha>)
+        id: tags
+        run: |
+          {
+            echo 'list<<EOF'
+            echo "$IMAGE:$GITHUB_SHA"
+            if [ "$GITHUB_REF" = refs/heads/main ]; then
+              echo "$IMAGE:latest"
+            else
+              echo "$IMAGE:${GITHUB_REF_NAME//\//-}"
+            fi
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
       - uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: |
-            ${{ env.IMAGE }}:latest
-            ${{ env.IMAGE }}:${{ github.sha }}
+          tags: ${{ steps.tags.outputs.list }}
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
