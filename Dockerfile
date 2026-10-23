@@ -67,6 +67,11 @@ RUN pip install "insightface==0.7.3" \
     && install-node https://github.com/cubiq/PuLID_ComfyUI                     93e0c4c226b87b23c0009d671978bad0e77289ff PuLID_ComfyUI \
     && python -c "import insightface; print('insightface', insightface.__version__)"
 
+# ---- Face restore for ImageLab's Edit tools (FaceRestoreModelLoader -> FaceRestoreCFWithModel). The pack vendors its
+#      own basicsr and facelib and puts its folder first on sys.path, so no pip basicsr is wanted; its requirements
+#      add lpips and lmdb, which the vendored basicsr imports at load time. Its own layer keeps the insightface build cached.
+RUN install-node https://github.com/mav-rik/facerestore_cf                 ff4d7a5c102441d8f058dd6135797ffb57b6c6ad facerestore_cf
+
 # Re-assert the CUDA torch build and the GPU onnxruntime (several packs pull the CPU 'onnxruntime',
 # which shadows onnxruntime-gpu's providers), then prove CUDA 12.8 + the GPU provider are what's left.
 RUN pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
@@ -75,6 +80,13 @@ RUN pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
     && pip install "onnxruntime-gpu>=1.19" \
     && python -c "import torch, sys; print('torch', torch.__version__, 'cuda', torch.version.cuda); sys.exit(0 if torch.version.cuda and torch.version.cuda.startswith('12.8') else 1)" \
     && python -c "import onnxruntime as ort, sys; p=ort.get_available_providers(); print('ort', ort.__version__, p); sys.exit(0 if 'CUDAExecutionProvider' in p else 1)"
+
+# install-node only warns when a requirement fails, and ComfyUI only logs a pack that will not import, so prove the
+# face restore nodes load against the final torch. The build has no GPU, hence --cpu before comfy.model_management loads.
+RUN cd /opt/ComfyUI && python -c "import sys; sys.path[:0] = ['/opt/ComfyUI', '/opt/ComfyUI/custom_nodes']; \
+from comfy.cli_args import args; args.cpu = True; \
+import facerestore_cf as m; need = {'FaceRestoreModelLoader', 'FaceRestoreCFWithModel'}; \
+print('facerestore_cf', sorted(m.NODE_CLASS_MAPPINGS)); sys.exit(0 if need <= set(m.NODE_CLASS_MAPPINGS) else 1)"
 
 # ---- ImageLabCore: the API the front end talks to ---------------------------------
 # This is what answers /imagelab/api/hashes, /imagelab/api/downloads and /imagelab/api/favorites. Without it
