@@ -6,7 +6,7 @@
 # executable is taken. The registry is public (anonymous pull), so the build needs no login.
 # Move the pin to a sha whose imagelab-server "Image" run (job agent-image) is green and that
 # matches what the server runs.
-ARG IMAGELAB_AGENT_TAG=c0e39b7
+ARG IMAGELAB_AGENT_TAG=71a9531
 FROM gitea.dev.blueoceanswim.com/donny/imagelab-agent:${IMAGELAB_AGENT_TAG} AS agent
 
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
