@@ -1,0 +1,63 @@
+# Model pack `video` (MODEL_PACKS=image,video): ImageLab's Video mode, Wan 2.2 and MiniMax H3. Same columns and rules as image.tsv.
+# Nothing here is needed for images; a pod started for images or 3D only skips it (about 147 GB).
+url	folder	name	bytes	sha256
+
+# The Wan latent's TAESD preview decoder (--preview-method taesd), only used for video latents.
+https://huggingface.co/lightx2v/Autoencoders/resolve/main/lighttaew2_1.safetensors	vae_approx	lighttaew2_1.safetensors	45274004	8666e769f449f2d955651564bcadb0c5e12461b50480e67b7241f32c15f11a19
+# --- Wan 2.2 video (ImageLab's Video view; workflows/Wan 2.2 *.json) ---
+# SmoothMix Wan 2.2 14B (civitai model 1995784), T2V v4.0 + I2V v2.0, high + low noise experts. CivitAI calls them
+# "Checkpoint", but they are the diffusion model only: diffusion_models, for UNETLoader. The T2V ones have the lightx2v
+# speed LoRA merged in (the Video view's Fast then adds none); the I2V ones do not.
+civitai:3138094	diffusion_models	smoothMixWan2214BI2V_t2vHighV40.safetensors	16065804446	2407147f0a6a9272547750fa27fca3cca384a39c9261ead1bab60972fe878862
+civitai:3138091	diffusion_models	smoothMixWan2214BI2V_t2vLowV40.safetensors	16065804446	ec57fbfbb0655620d9187394611ccf1cc6e9145c105f8704d2caac2ff26a2619
+civitai:2513182	diffusion_models	smoothMixWan2214BI2V_i2vV20High.safetensors	14550099704	1f40184ebd858b179d71fdcfa9c1ebc5cb79fa7ae90474c5ba44ce8abe5e9bc3
+civitai:2513186	diffusion_models	smoothMixWan2214BI2V_i2vV20Low.safetensors	14550099768	5de2d526f4349834c36f06972f610997edfcbc896cdc4211362daea6b643b125
+https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors	text_encoders	umt5_xxl_fp8_e4m3fn_scaled.safetensors	6735906897	c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68
+https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors	vae	wan_2.1_vae.safetensors	253815318	2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b
+# lightx2v 4-step LoRAs: the Video view's Fast mode (4 steps, CFG 1).
+https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors	loras	wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors	1226977424	698321cb86bd30c4af06c9b84e656a1048c8cb54e06d50694536fb5de37fde41
+https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors	loras	wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors	1226977424	ec95216e614b3c132c11bfb387b11feedf62163150ccc9068bca8a189771e75a
+https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors	loras	wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors	1226977424	d176c808d6fc461999b68e321efcb7501b20b8c3797523ed0df14f7d1deff11e
+https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors	loras	wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors	1226977424	024f21de095bc8fad9809ded3e9e49a2e170dcf27075da8145ba7d60d8aab7f9
+# Fast video upscalers (the Video view's Upscale option). A100, 81 frames 832x480 x2: Nomos 12 s, AnimeSharpV4 20 s, ClearReality 33 s.
+https://github.com/Phhofm/models/releases/download/2xNomosUni_span_multijpg/2xNomosUni_span_multijpg.safetensors	upscale_models	2xNomosUni_span_multijpg.safetensors	4461056	bee2a9c082f2b8f6e7f5db504b36593c24a1a959511f587114c399ca58b9c92c
+https://huggingface.co/Kim2091/2x-AnimeSharpV4/resolve/main/2x-AnimeSharpV4_Fast_RCAN_PU.safetensors	upscale_models	2x-AnimeSharpV4_Fast_RCAN_PU.safetensors	31359158	b641c9eb10b43f26538177aa8f0fef8b9fc2a153afd1431d0a062a84c49ce6d0
+https://huggingface.co/Kim2091/ClearRealityV1/resolve/main/4x-ClearRealityV1.safetensors	upscale_models	4x-ClearRealityV1.safetensors	4492232	83a9c8e279e3d07548e2b0d736dc2c73c1736a07072a748ed4fafbba99b44693
+
+# --- Wan 2.2 video add-ons (2026-10-18; ImageLab's Video mode, Advanced tier) ---
+# Frame interpolation: ComfyUI core's RIFE / FILM nodes (FrameInterpolationModelLoader + FrameInterpolate, PR 13258, in v0.34.5)
+# read models/frame_interpolation. Comfy-Org's repack of Practical-RIFE 4.25/4.26 and Google FILM; 4.26 is the pick (no ensemble, fastest),
+# heavy is sharper on big motion, lite is quickest, FILM handles larger jumps. ~137 MB all four.
+https://huggingface.co/Comfy-Org/frame_interpolation/resolve/main/frame_interpolation/rife_v4.26.safetensors	frame_interpolation	rife_v4.26.safetensors	22674688	151874592c877740e5db11522f4514df569eeafb0a0fcb2696f16e9e8d317c94
+https://huggingface.co/Comfy-Org/frame_interpolation/resolve/main/frame_interpolation/rife_v4.26_heavy.safetensors	frame_interpolation	rife_v4.26_heavy.safetensors	22908216	d2448f68503134b8c7c5430ce6032d6c76681a9a72f0ea8e0a56c7bee813482f
+https://huggingface.co/Comfy-Org/frame_interpolation/resolve/main/frame_interpolation/rife_v4.25_lite.safetensors	frame_interpolation	rife_v4.25_lite.safetensors	22506384	e5e5fe0286d30708f4c36aa23639a38d3d7cd0c724922c66e6b04130ae12c6e4
+https://huggingface.co/Comfy-Org/frame_interpolation/resolve/main/frame_interpolation/film_net_fp16.safetensors	frame_interpolation	film_net_fp16.safetensors	68882302	f226e51375dc839d4b40e5c3d63da560dd1ea1c962364ec78f5adf2d05db05c0
+# Anime Style v2 (CivitAI 2222779 I2V / 2200950 T2V, the most-downloaded Wan 2.2 anime LoRA pairs; triggers "An1meStyl3", "AnimeStyle").
+# Wan 2.2 LoRAs come as a high-noise / low-noise pair; the Video mode's LoRA picker puts a name that says which on that expert.
+civitai:2516837	loras	wan2.2_i2v_animestyle_v2_high.safetensors	153453632	e03b335d8b89744f3510a5443e4275a1b668aeec24b5e7ad149b9f87b0bfeb54
+civitai:2516839	loras	wan2.2_i2v_animestyle_v2_low.safetensors	153453632	e04520a4ddc120abaac5dfd245df7322cd65485a9ddcb4e093e22f31177f5436
+civitai:2515229	loras	wan2.2_t2v_animestyle_v2_high.safetensors	153453632	cddb6cc4e525a81c72269de92a5b1fa024b40cf6f2f418adc7fccaa319aef3e7
+civitai:2515234	loras	wan2.2_t2v_animestyle_v2_low.safetensors	153453632	48bb8a135e03e6063f5f32d64143eadc30d17490eed36af9d7892a32256007f5
+# Newer 4-step speed LoRAs, selectable under Speed & sampling > Speed LoRA files (the defaults above stay the Comfy-Org v1 / v1.1 pairs):
+# lightx2v's 2026-04-12 I2V distill as Kijai's rank-64 extraction (trained at 720p, said to keep more motion) and the T2V Seko V2.0 pair.
+https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22_Lightx2v/Wan_2_2_I2V_A14B_HIGH_lightx2v_4step_lora_260412_rank_64_fp16.safetensors	loras	Wan_2_2_I2V_A14B_HIGH_lightx2v_4step_lora_260412_rank_64_fp16.safetensors	630695648	8e0a86e765ade42a1deca52eb7411348254a019147be8c4eed88c7ad465d3399
+https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22_Lightx2v/Wan_2_2_I2V_A14B_LOW_lightx2v_4step_lora_260412_rank_64_fp16.safetensors	loras	Wan_2_2_I2V_A14B_LOW_lightx2v_4step_lora_260412_rank_64_fp16.safetensors	630695648	09e10abd98460b66439bd77ea671e94c10fdc8251e0b986aa196d1904e3cc583
+https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-T2V-A14B-4steps-lora-rank64-Seko-V2.0/high_noise_model.safetensors	loras	wan2.2_t2v_lightx2v_4steps_lora_SekoV2.0_high_noise.safetensors	1226977424	78cc2c9b44aca9ded8f69c6619639edca7459308051161253c3aa04ac6169a58
+https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-T2V-A14B-4steps-lora-rank64-Seko-V2.0/low_noise_model.safetensors	loras	wan2.2_t2v_lightx2v_4steps_lora_SekoV2.0_low_noise.safetensors	1226977424	6bb498f926e71217106c3642e75273580c1de2dec0a6902cbae8e83d2402d5cf
+
+# --- MiniMax H3 (2026-10-19; ImageLab's Video mode, the "MiniMax H3" engine) ---
+# One 33B omni model: video with its own 32 kHz stereo soundtrack, 24 fps, 5-15 s, text / first-last frame (fl2va) / reference
+# pictures (ref2va). Nodes are in ComfyUI v0.34.5 itself (comfy_extras/nodes_minimax_h3.py) and KJNodes. Files are Comfy-Org's
+# repack and the bundled video_minimax_h3_* templates' defaults: the pruned INT8 (convrot) checkpoints (21 GB each; the full
+# bf16 is 66 GB and the pruned bf16 40 GB would not fit the pod's 41 GB video share), the NVFP4-AWQ Qwen3-VL-32B text encoder
+# (16 GB; the model card says it needs no Blackwell GPU; the INT8 one is 27 GB), fp16 video VAE, fp32 audio VAE, and lightx2v's
+# turbo LoRAs (8-step and 4-step for fl2va, 4-step for ref2va). ~69 GB. Licence: MiniMax community licence; Comfy's page says a
+# commercial licence is required for use in the US / EU / UK / Korea.
+https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors	diffusion_models	minimax_h3_fl2va_pruned_int8_convrot.safetensors	20970379616	e889202c41dafb67b10d67b97f0d8541508036a6090af23425a5c2615d03c47a
+https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors	diffusion_models	minimax_h3_ref2va_pruned_int8_convrot.safetensors	20970379616	9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779
+https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors	text_encoders	qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors	15687142551	35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6
+https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors	vae	minimax_h3_video_vae_fp16.safetensors	5207808496	7c1f131492e7eddacaac9069a61b81bdd39de5cc96561e677c5eab1cdce5e522
+https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors	vae	minimax_h3_audio_vae_fp32.safetensors	605254808	8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48
+https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors	loras	minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors	1956193000	2339acdf19bfe123f46b971ea35d367a84adb85de43627e1eceafa5a5b2b111e
+https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors	loras	minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors	1956192992	c396a9a06f58399e9df9754b18299818d84a2ddd371724ba48fe4a41221437dc
+https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors	loras	minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors	1956193000	5b9ab5ade15d0775676d01a907268a69a1468dc6033b3b0d3ded5502f3ebb84c

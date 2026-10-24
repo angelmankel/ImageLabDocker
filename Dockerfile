@@ -1,13 +1,13 @@
 # ComfyUI image for ImageLab (RTX 5090 / Blackwell ready).
 # CUDA 12.8 + torch 2.8.0 cu128 wheels; ComfyUI and every custom node pinned to a commit.
 
-# The ImageLab worker agent (imagelab-server apps/agent), pinned to the imagelab-server commit its
-# image was built from. That image is the compiled single executable on a small Debian; only the
-# executable is taken. The registry is public (anonymous pull), so the build needs no login.
-# Move the pin to a sha whose imagelab-server "Image" run (job agent-image) is green and that
-# matches what the server runs.
-ARG IMAGELAB_AGENT_TAG=6e9dc4a
-FROM gitea.dev.blueoceanswim.com/donny/imagelab-agent:${IMAGELAB_AGENT_TAG} AS agent
+# The agent (donny/gpu-agent apps/agent, protocol 2; gpu-agent DESIGN §8.3, §10.2 step 5), pinned to the gpu-agent
+# commit its image was built from (.gitea/workflows/image.yml pushes donny/gpu-agent:<short sha> on every push to
+# main). That image is the compiled single executable on a small Debian; only the executable is taken. The
+# registry is public (anonymous pull), so the build needs no login. Move the pin to a sha whose Image run is
+# green, ideally the one gpu-server's sidecar runs (imagelab-server docs/workers.md).
+ARG GPU_AGENT_TAG=4d201d0
+FROM gitea.dev.blueoceanswim.com/donny/gpu-agent:${GPU_AGENT_TAG} AS agent
 
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
 
@@ -48,7 +48,7 @@ RUN chmod +x /usr/local/bin/install-node \
     && install-node https://github.com/Fannovel16/comfyui_controlnet_aux 59b1fc411ede8623b2997855b8018f0b3b6cf49f comfyui_controlnet_aux
 
 # ---- Anime-workstation packs (pinned). skip_download_model stops Impact-Pack's install.py from
-#      fetching SAM into the image (models come from models.txt onto the volume instead).
+#      fetching SAM into the image (models come from packs/*.tsv onto the volume instead).
 RUN touch /opt/ComfyUI/custom_nodes/skip_download_model \
     && install-node https://github.com/Comfy-Org/ComfyUI-Manager               f82970b7cb63ad44928308f980a1d38fda103cbb ComfyUI-Manager \
     && install-node https://github.com/ltdrdata/ComfyUI-Impact-Pack            429d0159ad429e64d2b3916e6e7be9c22d025c3c ComfyUI-Impact-Pack \
@@ -133,7 +133,9 @@ sys.exit(0 if all(need[n] <= got[n] for n in need) else 1)"
 RUN install-node https://github.com/angelmankel/ImageLabCore 77a694fce47b11cdf24cd9fb1c551e0a42729bf6 ImageLabCore
 
 # ---- Runtime files --------------------------------------------------------------
-COPY models.txt download-models.sh start.sh agent.sh nginx.conf.template live.py /opt/imagelab/
+# packs/: the model manifests (image.tsv, video.tsv, 3d.tsv = duel-maps deploy/models/3d.tsv), picked per pod with MODEL_PACKS.
+COPY download-models.sh start.sh agent.sh nginx.conf.template live.py /opt/imagelab/
+COPY packs /opt/imagelab/packs
 COPY app /opt/imagelab/app
 COPY workflows /opt/imagelab/workflows
 
@@ -150,10 +152,21 @@ RUN git clone --depth 1 https://github.com/angelmankel/ImageLab /tmp/imagelab \
     && rm -rf /tmp/imagelab
 RUN chmod +x /opt/imagelab/download-models.sh /opt/imagelab/start.sh /opt/imagelab/agent.sh
 
-# The agent runs only when the pod env names a server and a worker token (agent.sh). --version
-# proves the executable runs on this base (glibc, CA roots) at build time, not on a billing pod.
-COPY --from=agent /usr/local/bin/imagelab-agent /usr/local/bin/imagelab-agent
-RUN /usr/local/bin/imagelab-agent --version
+# The agent runs only when the pod env has a hub token (agent.sh). --version proves the executable runs on this
+# base (glibc, CA roots) at build time, not on a billing pod, and that it is the pinned build (`0.1.0+<sha>`).
+# The old protocol-1 imagelab-agent is gone from the image: one gpu-agent serves both ComfyUIs and every hub.
+ARG GPU_AGENT_TAG
+COPY --from=agent /usr/local/bin/gpu-agent /usr/local/bin/gpu-agent
+RUN /usr/local/bin/gpu-agent --version | tee /dev/stderr | grep -q "+${GPU_AGENT_TAG}\$" \
+    && test ! -e /usr/local/bin/imagelab-agent
+
+# ComfyUI must start with every custom node: --quick-test-for-ci loads them all and exits; a pack that does not
+# import is only a warning in ComfyUI's log ("IMPORT FAILED"), so the build fails on that line. --cpu: no GPU here.
+# skip_download_model (above) keeps Impact-Pack from fetching SAM; ComfyUI-Manager's own startup fetches stay (network).
+RUN cd /opt/ComfyUI && python main.py --cpu --quick-test-for-ci 2>&1 | tee /tmp/comfy-quick-test.log \
+    && ! grep -E "IMPORT FAILED|Cannot import" /tmp/comfy-quick-test.log \
+    && grep -q "Import times for custom nodes" /tmp/comfy-quick-test.log \
+    && rm -f /tmp/comfy-quick-test.log
 
 ENV MODELS_DIR=/workspace/ComfyUI/models \
     IMAGELAB_APP_DIR=/workspace/imagelab-app \

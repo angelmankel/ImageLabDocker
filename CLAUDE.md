@@ -71,10 +71,17 @@ cd ~/Github/ImageLabProject && set -a && . ./.env && set +a
 
 ## Starting a pod
 
+**Pods are normally started by the pod manager** (gpu-agent `docs/DESIGN.md` §11: one service for
+ImageLab and Map Maker, started from either app's UI). It builds the whole create call itself with the
+env below (a fresh hub token per link, `MODEL_PACKS` as picked, `WORKER_COST_PER_HOUR`), waits for the
+agent's hello and terminates the pod when it is done. What follows is the by-hand way, for a test pod or
+when the manager is down; the env is the same.
+
 The GPU changes with the job. What does not change: **secure cloud, US**. Community is cheaper and
 not worth it — a community RTX 5090 was still pulling the 8.3 GB image fifteen minutes in at about
-10 MB/s, while a secure one served in eighty seconds. First boot downloads ~159 GB of models, so the
-uplink is the whole game.
+10 MB/s, while a secure one served in eighty seconds. First boot downloads the model packs the pod
+asks for (`image` ~96 GB, `video` ~147 GB, `3d` ~45 GB; see *Model packs* below), so the uplink is the
+whole game.
 
 List what is available and what it costs:
 
@@ -103,12 +110,12 @@ curl -s https://api.runpod.io/graphql -H "Authorization: Bearer $RUNPOD_API_KEY"
     env: [{ key: \\\"CIVITAI_API_KEY\\\", value: \\\"$CIVITAI_API_KEY\\\" },
           { key: \\\"COMFY_AUTH_USER\\\", value: \\\"$COMFY_LOCAL_USER\\\" },
           { key: \\\"COMFY_AUTH_TOKEN\\\", value: \\\"$COMFY_LOCAL_TOKEN\\\" },
-          { key: \\\"IMAGELAB_SERVER_URL\\\", value: \\\"wss://lab.blueoceanswim.com/agent\\\" },
-          { key: \\\"IMAGELAB_WORKER_TOKEN\\\", value: \\\"$IMAGELAB_POD_WORKER_TOKEN\\\" }]
+          { key: \\\"MODEL_PACKS\\\", value: \\\"image\\\" },
+          { key: \\\"GPU_AGENT_TOKEN_LAB\\\", value: \\\"$IMAGELAB_POD_WORKER_TOKEN\\\" }]
   }) { id costPerHr machine { gpuDisplayName location } } }\"}" | jq -c .
 ```
 
-- `volumeInGb: 512` is a **pod-local** volume (models.txt alone is ~159 GB since Wan joined it; the template has 512 too, since 09-29): made with the pod, gone with it, no standing
+- `volumeInGb: 512` is a **pod-local** volume (all three packs together are ~290 GB; the template has 512 too, since 09-29): made with the pod, gone with it, no standing
   storage bill, and it survives a *stop*. A network volume bills between sessions.
 - **Never pass `volumeInGb` for a B200 or B300.** Blackwell datacentre nodes have no local disk and
   every attempt returns "no instances available" until it is dropped. An RTX 5090 is Blackwell too
@@ -120,16 +127,24 @@ curl -s https://api.runpod.io/graphql -H "Authorization: Bearer $RUNPOD_API_KEY"
   Traefik login keeps working. The image defaults the user to `imagelab`.
 - `COMFY_AUTH_ALIASES` (optional, space-separated) adds more user names with the same password, for
   a browser that still sends an older one. Add `{ key: \\\"COMFY_AUTH_ALIASES\\\", value: \\\"name\\\" }` to `env`.
-- `IMAGELAB_SERVER_URL` + `IMAGELAB_WORKER_TOKEN` make the pod a worker of the ImageLab server
-  (*The ImageLab agent* below): the pod then needs no Traefik route for lab. Leave both out for a
-  pod used on its own. The token is the pod's own worker token (`worker:create`, see
-  imagelab-server `docs/workers.md`), never gpu-server's or winold's. A second ComfyUI (2+ GPUs or
-  ≥ 80 GB) is a second worker only with `IMAGELAB_WORKER_TOKEN_2`. Optional:
-  `WORKER_COST_PER_HOUR` (and `_2`), `AGENT_LOG_LEVEL`.
+- `GPU_AGENT_TOKEN_LAB` makes the pod a worker of ImageLab, `GPU_AGENT_TOKEN_MAPS` / `GPU_AGENT_TOKEN_MAPS_DEV`
+  of Map Maker prod / dev — one agent, one link per token (*The agent* below): the pod then needs no
+  Traefik route for any app. Leave them all out for a pod used on its own. Each token is the pod's own
+  worker token for that app (ImageLab: `worker:create`, imagelab-server `docs/workers.md`; Map Maker:
+  its enrol code), never gpu-server's or winold's. Both ComfyUIs (2+ GPUs or ≥ 80 GB) are slots `gpu0`
+  and `gpu1` of that one worker, no second token. Optional: `WORKER_COST_PER_HOUR` (the whole pod; the
+  agent splits it over the slots), `AGENT_LOG_LEVEL`, `GPU_AGENT_URL_<LAB|MAPS|MAPS_DEV>` (another hub URL).
+  Old templates with `IMAGELAB_SERVER_URL` + `IMAGELAB_WORKER_TOKEN` still get the `lab` link;
+  `IMAGELAB_WORKER_TOKEN_2` and `WORKER_COST_PER_HOUR_2` are ignored with a warning in `/pod/logs/agent.log`.
+- `MODEL_PACKS` (`image`, `video`, `3d`, comma separated; default `image`) picks what the first boot
+  downloads; `MANIFEST=<file>` replaces the packs with one custom list. `HF_TOKEN` (optional) is needed
+  for the gated file of the `3d` pack. See *Model packs* below.
 
 **Or from the RunPod console:** the private template **ImageLab Pod** (`63ya3ikzof`) has the image,
 disks, port and env already set, including the secrets. Pick Secure Cloud and a US GPU. If
-`.env` credentials change, update the template too: it holds its own copy.
+`.env` credentials change, update the template too: it holds its own copy. The template still has the old
+`IMAGELAB_SERVER_URL` + `IMAGELAB_WORKER_TOKEN` pair (it works, as the `lab` link); when it is next edited,
+replace them with `GPU_AGENT_TOKEN_LAB` and add `MODEL_PACKS`.
 
 Read the address once it is actually serving:
 
@@ -160,17 +175,39 @@ direct `ip:port` answers 200 means that and nothing else.
 | `/video-comfy/` | a **second ComfyUI, for video**, on 127.0.0.1:8191 (`COMFY_VIDEO_PORT`). nginx strips the prefix; websockets, basic auth and proxy settings as for `/`. On by default with 2+ GPUs (it gets its own card) or one GPU of ≥ 80 GB (shared); `COMFY_VIDEO=1/0` forces it. 502 when it is off or still starting. See *The second ComfyUI* below. Log: `/pod/logs/comfy-video.log` |
 | `/video-comfy/imagelab/api/*` | goes to the **first** ComfyUI (one owner for the hash index and downloads), except `/video-comfy/imagelab/api/favorites*`, which the second serves itself (a favorite is copied out of *its* temp/) |
 | `/pod/logs/instances.json` | what `start.sh` launched at boot (configuration, not liveness), e.g. `{"instances": 2, "gpus": 2, "mode": "separate", "image": {"path": "/", "gpu": 0, "vram_gb": null}, "video": {"path": "/video-comfy/", "gpu": 1, "vram_gb": null}, "llm": {"path": "/llm/", "gpu": 0}}`. `mode` is `single` (one ComfyUI), `shared` (two on one card; `vram_gb` = each one's share) or `separate`; `video` / `llm` are `null` when off; `gpu` is an nvidia-smi index, `null` when unknown |
-| `/pod/logs/agent.log` | the ImageLab agent (`agent-2.log` for the second ComfyUI's); absent when the pod env has no `IMAGELAB_SERVER_URL` / `IMAGELAB_WORKER_TOKEN` |
+| `/pod/logs/agent.log` | the agent (gpu-agent; one for both ComfyUIs and every hub); absent when the pod env has no hub token |
 | `/pod/logs/download.log` | model download progress |
-| `/pod/logs/models-complete` | 200 once every model has landed |
+| `/pod/logs/models-complete` | 200 once every model of the selected packs has landed |
 
 Behind nginx basic auth: user `COMFY_LOCAL_USER` (`imagelab`), password `COMFY_LOCAL_TOKEN`.
 ImageLab calls only ComfyUI and `/imagelab/api/*`, never `/pod/app`, so the pod routes can change
 without an ImageLab build. Models are installed from ImageLab's model browser, which goes through
 `/imagelab/api/downloads`.
 
-First boot fetches **~159 GB** from `models.txt` (Wan video is ~73 GB of it). Civitai answers 403 to some
-aria2 requests — normal, the curl fallback picks them up. Watch `models-complete`.
+First boot fetches the packs `MODEL_PACKS` names (below). Civitai answers 403 to some aria2
+requests — normal, the curl fallback picks them up. Watch `models-complete`.
+
+## Model packs
+
+`packs/*.tsv` are the model manifests, one per pack; the pod env's `MODEL_PACKS` (default `image`) says
+which ones `download-models.sh` adds on boot. Each row is `url, folder, name, bytes, sha256` (tab separated,
+one header row; the same shape as Map Maker's `duel-maps` `deploy/models/3d.tsv`, which `packs/3d.tsv` is a
+copy of — change it there first). `civitai:<versionId>` rows need `CIVITAI_API_KEY`.
+
+| Pack | Files | Size | What |
+|---|---|---|---|
+| `image` | 83 | ~96 GB | everything ImageLab's image, style, edit and workflow features use (Illustrious, Anima, Pony, ControlNets, IP-Adapter / Face, upscalers, taggers, face restore) |
+| `video` | 34 | ~147 GB | ImageLab's Video mode: Wan 2.2 (SmoothMix + lightx2v LoRAs, add-ons) and MiniMax H3 |
+| `3d` | 11 | ~45 GB | Map Maker's 3D fallback (gpu-agent DESIGN §7 Q15): TRELLIS.2, dino_v3, BiRefNet, FLUX.2 Klein 9B fp8 + Qwen3 8B encoder, FLUX.1-dev fp8, UltraTex LoRA + decoder (`models/ultratex`) |
+
+The copy is **add-only** (gpu-agent DESIGN §8.1, imagelab-server #175): a file that already has its name is
+never touched, whatever its size (logged as `kept`); anything else downloads as `<name>.part`, is checked
+for bytes and sha256 and only then renamed; a wrong hash is refused and the part deleted, so a half file or
+a swapped upstream never gets a model's name. `MANIFEST=<file>` replaces the packs with one custom list (a
+test pod: a few rows copied out of a pack). `HF_TOKEN` is sent to huggingface.co only, for the `3d` pack's
+gated `flux-2-klein-9b-fp8.safetensors` (an account that accepted the FLUX non-commercial licence); without
+it that one row fails and `models-complete` never appears, the rest still lands. `scripts/container-test.sh`
+is the test of all this (CI runs it on every image).
 
 ## The second ComfyUI (video)
 
@@ -251,32 +288,42 @@ Caveats, none of them tried on a pod yet:
   API base from `location.pathname`. nginx cuts the prefix from the raw request line (a `map` on
   `$request_uri`), so an encoded `%2F` in `/api/userdata/workflows%2F…` survives.
 
-## The ImageLab agent
+## The agent (gpu-agent)
 
-The image carries the ImageLab worker agent (`/usr/local/bin/imagelab-agent`, imagelab-server
-`apps/agent`), pinned in the `Dockerfile` (`IMAGELAB_AGENT_TAG`, an imagelab-server commit; the
-executable is copied out of `gitea.dev.blueoceanswim.com/donny/imagelab-agent:<tag>`, a public
-image). `start.sh` hands it to `agent.sh`, which starts it only when the pod env has both
-`IMAGELAB_SERVER_URL` and `IMAGELAB_WORKER_TOKEN`; otherwise it logs `[agent] off` and nothing runs.
-gpu-server runs this same image without those two and keeps its own agent beside it, so it never
-gets a second one.
+The image carries the agent (`/usr/local/bin/gpu-agent`, `donny/gpu-agent` `apps/agent`, worker
+protocol 2; gpu-agent `docs/DESIGN.md` §8.3, §10.2 step 5), pinned in the `Dockerfile` (`GPU_AGENT_TAG`, a
+gpu-agent commit; the executable is copied out of `gitea.dev.blueoceanswim.com/donny/gpu-agent:<tag>`,
+a public image, and `--version` must print that sha at build time). `start.sh` hands it to `agent.sh`,
+which starts it only when the pod env has a hub token (`GPU_AGENT_TOKEN_LAB` / `_MAPS` / `_MAPS_DEV`, or
+the old `IMAGELAB_SERVER_URL` + `IMAGELAB_WORKER_TOKEN` pair); otherwise it logs `[agent] off` and
+nothing runs. gpu-server runs this same image without a token and keeps its own agent (the
+`imagelab-agent` sidecar, also gpu-agent) beside it, so it never gets a second one. The old
+protocol-1 `imagelab-agent` is no longer in the image.
 
-The agent connects OUT to the server's websocket, so a pod is a lab worker with no port, no
-Traefik route and no repointing after a resume. Per ComfyUI that `start.sh` launched, one agent:
+**One agent per pod**, not one per ComfyUI. It connects OUT to each hub's websocket (`lab` →
+`wss://agents.blueoceanswim.com/lab/agent`, `maps` → `/maps/agent`, `maps-dev` → `/maps-dev/agent`;
+`GPU_AGENT_URL_<X>` overrides one), so the pod is a worker of every linked app with no port, no Traefik
+route and no repointing after a resume. Each ComfyUI `start.sh` launched is an engine of it:
 
-| | first ComfyUI | second ComfyUI (when on) |
+| | image ComfyUI | video ComfyUI (when on) |
 |---|---|---|
-| token | `IMAGELAB_WORKER_TOKEN` | `IMAGELAB_WORKER_TOKEN_2` (no agent without it) |
-| `COMFY_URL` | `http://127.0.0.1:$COMFY_PORT` | `http://127.0.0.1:$COMFY_VIDEO_PORT` |
-| Ollama | the pod's (`off` with `SKIP_LLM=1`) | `off` (one Ollama, one worker reports it) |
-| log | `/pod/logs/agent.log` | `/pod/logs/agent-2.log` |
+| engine / slot | `comfy0` / `gpu0` | `comfy1` / `gpu1` |
+| URL | `http://127.0.0.1:$COMFY_PORT` (loopback: no nginx, no basic auth) | `http://127.0.0.1:$COMFY_VIDEO_PORT` |
+| `inputDir` / `outputDir` | `/workspace/ComfyUI/input` / `/workspace/ComfyUI/output` (a job's inputs and the files its save nodes wrote are deleted after the job, gpu-agent #187) | the same folders |
+| control | `attach`, `pod: true`, `imageManaged: true` (update / install-node refused; restart = ComfyUI-Manager's soft reboot) | the same |
 
-Both: straight to ComfyUI on loopback, so no basic auth (`COMFY_AUTH_*` are unset for the agent);
-`COMFY_CONTROL=attach` + `WORKER_POD=1` (image-managed: the server's update / install-node actions
-are refused, restart is ComfyUI-Manager's soft reboot); `COMFY_INPUT_DIR=/workspace/ComfyUI/input`
-(job inputs deleted after each job). Each waits until its ComfyUI answers `/system_stats` (10 min at
-most), then runs in a restart loop. `WORKER_COST_PER_HOUR` / `_2` go to the server as the
-worker's cost.
+`agent.sh` writes all this to `/etc/gpu-agent/gpu-agent.yaml` at every boot. **Tokens never go into
+the file**: it says `token: env:GPU_AGENT_TOKEN_LAB` and the agent reads the variable, so the file can
+be printed (`AGENT_CONFIG_ONLY=1 agent.sh 8189 8191` does only that) without leaking anything. The
+hubs see one worker with one or two `gpu` slots; `WORKER_COST_PER_HOUR` (the whole pod) is split over
+them. The pod's Ollama is reported through the agent's `imagelab` extension (`OLLAMA_URL`; `off` with
+`SKIP_LLM=1`). The agent waits until the first ComfyUI answers `/system_stats` (10 min at most), then
+runs in a restart loop (10 s); log `/pod/logs/agent.log` (`AGENT_LOG_LEVEL`, `AGENT_LOG_FORMAT=text|json`).
+Its work folder (job inputs) is `/workspace/gpu-agent` on the volume.
+
+Checked (Server #197): the container test `scripts/container-test.sh` (CI job `test`) proves the yaml for
+two tokens + two ComfyUIs, one token, the legacy pair, none (`[agent] off`), the `_2` warnings, and that
+the agent accepts the file; the live pod check is recorded in the ticket.
 
 ## Host setup for a GPU worker (gpu-server, any new box)
 
@@ -391,6 +438,11 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
 
 ## Where this stands (2026-09-22)
 
+- **2026-10-24 (Server #197): the pod image runs gpu-agent** (`GPU_AGENT_TAG` in the `Dockerfile`), one agent for
+  both ComfyUIs and every hub, env `GPU_AGENT_TOKEN_LAB` / `_MAPS` / `_MAPS_DEV` (the old pair still works);
+  `models.txt` became `packs/image.tsv` + `packs/video.tsv` + `packs/3d.tsv` with sha256 per file, picked with
+  `MODEL_PACKS`; the build runs ComfyUI's `--quick-test-for-ci` (any custom-node import error fails it) and
+  `scripts/container-test.sh` on the pushed image. See *The agent* and *Model packs* above.
 - **No pod is running.** `ydq68v43bc6z23` (H200, US-NC-1, $5.29/h, started by Donny) was terminated on 10-18 after its
   107 images/videos were pulled to `/mnt/games/images/runpod/10-18-2026/` and its 14 workflows (unchanged). It ran
   ImageLab `0170a32` + ImageLabCore `c029913` (Model Type dropdown flicker fix; download clears ComfyUI's folder cache).
@@ -418,9 +470,11 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
   EGL backend on a headless box (duel-maps `deploy/runpod/ultratex/post.sh`); not patched here yet.
   It carries ImageLab and ImageLabCore at the pins in the `Dockerfile` and the files in
   `workflows/` (five tested, five reference ones not yet rendered).
-- **Models:** `models.txt` is ~232 GB (10-19: +MiniMax H3, ~69 GB; 10-18: +RIFE/FILM, Anime Style v2 LoRAs, newer lightx2v LoRAs, ~4 GB). Wan 2.2 video was added 09-29 (~73 GB: SmoothMix T2V + I2V high/low, umt5, wan_2.1_vae,
-  lightx2v 4-step LoRAs, 3 fast upscalers). Before that it was ~87 GB, including Anima (Turbo + Aesthetic, in
-  `diffusion_models`), Pony Realism v2.2, Mature Citron IL Unstable 3.0 and the Illustrious set.
+- **Models:** `packs/image.tsv` ~96 GB (Anima Turbo + Aesthetic in `diffusion_models`, Pony Realism v2.2, Mature Citron IL
+  Unstable 3.0, the Illustrious set, ControlNets, the Style tab's IP-Adapter / Face files, upscalers, taggers, face restore);
+  `packs/video.tsv` ~147 GB (Wan 2.2 SmoothMix T2V + I2V high/low, umt5, wan_2.1_vae, lightx2v 4-step LoRAs, fast upscalers,
+  added 09-29; RIFE/FILM, Anime Style v2 LoRAs, newer lightx2v LoRAs, 10-18; MiniMax H3 ~69 GB, 10-19); `packs/3d.tsv`
+  ~45 GB (Map Maker, 10-24). Until 10-24 all of it was one `models.txt` (~243 GB) that every pod downloaded whole.
 - **Workflows** (all five run; times measured on a B200): Anima Turbo (5 s), Anima Aesthetic (11 s),
   Pony Realism (8 s), Mature Citron IL, Illustrious Ultimate Upscale (49 s, 1664x2432).
 - **Model previews:** the node rescans after each pass (30s delay), skips aria2 partials,
@@ -462,8 +516,8 @@ Stop/resume is how you pick up a new image. **Pull images and push repos before 
    `Ctrl+Alt+Shift+M` fixes it and it is not a UI bug.
 10. **ImageLabCore's downloader is one connection, about 1 MB/s from Civitai.** A 7 GB checkpoint is
     an hour. `download-models.sh` uses aria2 with eight connections and gets 3-7 MB/s for the same
-    file, which is why `models.txt` is the place to add a model that every pod should have. For a
-    one-off on a live pod, aria2 is installed: run it there rather than waiting on the API.
+    file, which is why `packs/image.tsv` (or `video.tsv`) is the place to add a model that every pod should
+    have. For a one-off on a live pod, aria2 is installed: run it there rather than waiting on the API.
 11. **The ComfyUI editor adds a `control_after_generate` slot to any INT named `seed`**, declared in
     `/object_info` or not (`UltimateSDUpscale` does not declare one). A saved workflow therefore has
     an extra `"randomize"` in `widgets_values` after that seed. Anything reading widgets positionally

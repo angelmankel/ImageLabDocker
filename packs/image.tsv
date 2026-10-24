@@ -1,0 +1,135 @@
+# Model pack `image` (MODEL_PACKS=image, the default): every model ImageLab's image, style, edit and workflow features need.
+# Columns (tab separated, one header row, same shape as Map Maker's duel-maps deploy/models/3d.tsv): url, ComfyUI models
+# folder (under MODELS_DIR), exact file name, size in bytes, sha256. `civitai:<versionId>` expands to
+# https://civitai.com/api/download/models/<versionId>?token=$CIVITAI_API_KEY. download-models.sh adds what is missing,
+# checks bytes and sha256 before a file gets its name, and never overwrites or deletes (add-only). Sizes come from
+# Comfy Cloud's asset listing / Hugging Face headers; hashes from the Hugging Face paths-info API (LFS oid) and the
+# Civitai model-version API, or from the file itself for the few hosts with no hash API (GitHub releases, taesd).
+url	folder	name	bytes	sha256
+
+# --- Illustrious (SDXL) workflow ---
+# The two-pass Illustrious workflow: pass 1 on plain WAI (no lora, no merge) decides the
+# composition, then the latent is upscaled 1.25x and repainted by pass 2 on the style stack below. All five files
+# are required by it; the names are the ones the graphs ask for, which are Comfy Cloud's names, not Civitai's
+# (wai-illustrious-sdxl.safetensors is Civitai's waiIllustriousSDXL_v150.safetensors renamed on download).
+civitai:2167369	checkpoints	wai-illustrious-sdxl.safetensors	6938040682	befc694a296f75e996488ebf9f9db8a1493bd059b6e704b975829e87d5aeb4fa
+civitai:1023901	checkpoints	illustriousXLPersonalMerge_v30Noob10based.safetensors	6938042190	d14ea71ad5bf5a7bba4ad3f6dfd9319ebba32890b5010e3ddf61fcff8fa71d1a
+civitai:2938105	checkpoints	hexus_etnix.safetensors	6938041520	ef9600dbab2773301796463bad060821b6123d7cd6e3b541937157ae92c0c67e
+civitai:3321542	checkpoints	spicySouls_12.safetensors	6938042794	90599e31a884e29798e2f177c27debf6ef555f0d91b30bd6f0d3f9143a5ba252
+civitai:1675894	loras	Yu-Gi-Oh_Kagami_Takahiro_Style.safetensors	228463172	5b3a425b9cca7d08877822a8f8696fc19278bbd22e89fde904d7d6168abbacad
+civitai:1480107	loras	Yugioh_GX_Illustrious_X1_SD8.safetensors	170627948	2a7926f8317b023c3f0f35f34c02522969bd73067eae603e520840f010e55773
+civitai:1736373	loras	illustrious-detailer.safetensors	228465628	528277aedc0e3bd8a350b66e4f5af0488a10e0eba99c9974db0b43d17145ce01
+civitai:1021743	loras	retro_scifi_artstyle_illustriousXL-000021.safetensors	228460796	6f94cb871ccb64606a87b96399fed5de2060c93bb67ca24b025fa860043fc3b0
+https://huggingface.co/TencentARC/t2i-adapter-lineart-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	TencentARC__t2i-adapter-lineart-sdxl-10__diffusion_pytorch_model.fp16.safetensors	158060440	c19e9e1038c7c53b238185d8dc9fad87f95aa3124d211e19f39f1165bfb7230f
+https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth	upscale_models	RealESRGAN_x4plus_anime_6B.pth	17938799	f872d837d3c90ed2e05227bed711af5671a6fd1c9f7d7e91c911a61f155e99da
+https://huggingface.co/Kim2091/UltraSharp/resolve/main/4x-UltraSharp.pth	upscale_models	4x-UltraSharp.pth	66961958	a5812231fc936b42af08a5edba784195495d303d5b3248c24489ef0c4021fe01
+https://huggingface.co/Kim2091/UltraSharp/resolve/main/4x-UltraSharp.safetensors	upscale_models	4x-UltraSharp.safetensors	66864028	36a340b5509b699d2c06cb445ddc1d3d39199ac734d889ed6d7915f60e05bcbc
+
+# --- Anima workflows (workflows/Anima *.json) ---
+# Anima files are the diffusion model only (no text encoder, no VAE), so they go in diffusion_models for UNETLoader,
+# never in checkpoints: CheckpointLoaderSimple cannot load them.
+civitai:3170772	loras	Anima_Base_ygiohdsod_ydms.safetensors	420248796	1006a05e46d56f130d2859a957b87b5e8f3ab251914c3343cfb6d27dd4ffeb7f
+civitai:3263843	diffusion_models	anima_turboV11.safetensors	4182230656	fba11953276b57edf59d1dc4f1857ac05aa079c56f982b4d7c20298d57d3f7eb
+civitai:3126581	diffusion_models	anima_aestheticV11.safetensors	4182230656	3c1868387a3a1ff504bbb87c33678321965ead381fcf87afbd0264daa600c082
+https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/diffusion_models/anima-base-v1.0.safetensors	diffusion_models	anima-base-v1.0.safetensors	4182218328	bd43b7cffe1ed1153d9c41e7beb2f18cb1273eafbaa3af3edd6a173dc90a006e
+https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/text_encoders/qwen_3_06b_base.safetensors	text_encoders	qwen_3_06b_base.safetensors	1192135096	cd2a512003e2f9f3cd3c32a9c3573f820bb28c940f73c57b1ddaa983d9223eba
+https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors	vae	qwen_image_vae.safetensors	253806246	a70580f0213e67967ee9c95f05bb400e8fb08307e017a924bf3441223e023d1f
+
+# --- Pony Realism (workflows/Pony Realism.json) ---
+civitai:914390	checkpoints	ponyRealism_V22.safetensors	7105348856	7c97ecf786a50a54835a22277c35703787b840e98c04c318a4e3fef9d3b463f7
+civitai:652659	loras	LCMV2-PONYplus-PAseer.safetensors	53857340	d55252b638b515005e726fc323f9986e1d346b5ee094aad44b1bb29e1c1d71d9
+
+# --- Mature Citron IL (workflows/Mature Citron IL.json) ---
+civitai:2760019	checkpoints	matureCitronIL_Unstable30.safetensors	7307752976	b1e55e5bdcd12d1fb9919383fdca5ca221324e30d9ff2a828b240ebd33e9132e
+
+# --- BiRefNet_toonout for ComfyUI-RMBG (exactly the files/layout the node's own downloader would create) ---
+https://huggingface.co/1038lab/BiRefNet/resolve/main/BiRefNet_toonout.safetensors	RMBG/BiRefNet	BiRefNet_toonout.safetensors	884878824	5ff451d2e1d15dd22a66efea05640f79e470467f89f8bdc239a81a6757f66093
+https://huggingface.co/1038lab/BiRefNet/resolve/main/birefnet.py	RMBG/BiRefNet	birefnet.py	92068	a9566611aa07a6fbb68ddb6ac8e19e62c879a428fbfc2f44efa53d233f2e302f
+https://huggingface.co/1038lab/BiRefNet/resolve/main/BiRefNet_config.py	RMBG/BiRefNet	BiRefNet_config.py	298	e7b8c2a74f6cea6a59553d517f71d47f2c1d90e670a13416af17c25fe2f3dc52
+https://huggingface.co/1038lab/BiRefNet/resolve/main/config.json	RMBG/BiRefNet	config.json	402	966a1f0165b072d2d1309756e71907750e535ba5c3790d8cd0e69713ff3a56cd
+
+# --- AnimeLineArtPreprocessor weights for comfyui_controlnet_aux (ckpts dir is symlinked here by start.sh) ---
+https://huggingface.co/lllyasviel/Annotators/resolve/main/netG.pth	controlnet_aux_ckpts/lllyasviel/Annotators	netG.pth	217631959	ccabdcc3f5cf3c07cf65d58776acb21df7dfda825cdc70c9766a93fd62bfc488
+
+# ====================== anime workstation additions (2026-09-06) ======================
+# --- TAESD previews (--preview-method taesd); names must start with what comfy/latent_formats.py expects ---
+https://raw.githubusercontent.com/madebyollin/taesd/main/taesd_decoder.pth	vae_approx	taesd_decoder.pth	4913399	02873377c3f4659cd9f9adb2f718dcb434ba4c7bba3af3ee7bb95cbdabe2d3cf
+https://raw.githubusercontent.com/madebyollin/taesd/main/taesdxl_decoder.pth	vae_approx	taesdxl_decoder.pth	4913541	a3956b8a7a763f251c7357aad6375dacdb6d971121c73e97a3069fc33a94fe1e
+https://raw.githubusercontent.com/madebyollin/taesd/main/taesd3_decoder.pth	vae_approx	taesd3_decoder.pth	4940671	178fbb90c8c3bab4fe5e30dcba3b85d8bd2c9a203f71239c3a3223720c310b58
+https://raw.githubusercontent.com/madebyollin/taesd/main/taef1_decoder.pth	vae_approx	taef1_decoder.pth	4943336	beae86f2eeaf0cea884dc8ffe639fb297dac8c984441bb53420f07d767785104
+
+# --- SDXL ControlNets for Illustrious / NoobAI (fp16). No NoobAI openpose exists; use the xinsir union (promax) for pose. ---
+https://huggingface.co/Eugeoter/noob-sdxl-controlnet-canny/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	noob-sdxl-controlnet-canny.safetensors	2502139136	68d4115d0f97ff59f3444aa06bd81a6c1e96c8a3750d8f6b442aa0495cc89508
+https://huggingface.co/Eugeoter/noob-sdxl-controlnet-depth/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	noob-sdxl-controlnet-depth.safetensors	2502139136	806fcb75876fa08c684157f1fef9deb423b70c38534e8c629ff2069477e7dd8b
+https://huggingface.co/Eugeoter/noob-sdxl-controlnet-lineart_anime/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	noob-sdxl-controlnet-lineart_anime.safetensors	2502139136	44eae6a514a60ae426ff966ecdbb9e170ad63d8889456982bb29037df42b86a8
+https://huggingface.co/Eugeoter/noob-sdxl-controlnet-manga_line/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	noob-sdxl-controlnet-manga_line.safetensors	2502139136	6f2283231fc00f389b20fd46287185b8e9d8c3e647e056ba48268c45b931d213
+https://huggingface.co/Eugeoter/noob-sdxl-controlnet-scribble_pidinet/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	noob-sdxl-controlnet-scribble_pidinet.safetensors	2502139136	6ba55d75e34f63d0538c2dc1006415c495f254624c1c826df7dfaf4bc172ee47
+https://huggingface.co/xinsir/controlnet-union-sdxl-1.0/resolve/main/diffusion_pytorch_model_promax.safetensors	controlnet	xinsir-controlnet-union-sdxl-promax.safetensors	2513342408	9fae2e50cb431bfcbe05822b59ec2228df545ef27f711dea8949e9f4ed9f7cdc
+https://huggingface.co/2vXpSwA7/iroiro-lora/resolve/main/test_controlnet2/CN-anytest_v4-marged.safetensors	controlnet	CN-anytest_v4-marged.safetensors	2502139104	807aa29189c10660dff77a5bbfcf5cf39d60f7780199db36db36a9096e11ace7
+https://huggingface.co/TencentARC/t2i-adapter-sketch-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	TencentARC__t2i-adapter-sketch-sdxl-10__diffusion_pytorch_model.fp16.safetensors	158060440	9f88c53368d53bec6b70fc9d797ec12b88a512d2a7e9068d11fbf621917d9fdd
+https://huggingface.co/TencentARC/t2i-adapter-canny-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	TencentARC__t2i-adapter-canny-sdxl-10__diffusion_pytorch_model.fp16.safetensors	158060440	e3db0d9cb3dd54c116a429a1de067d952780047944dd7dba8be032dd2e737f81
+https://huggingface.co/TencentARC/t2i-adapter-depth-midas-sdxl-1.0/resolve/main/diffusion_pytorch_model.fp16.safetensors	controlnet	TencentARC__t2i-adapter-depth-midas-sdxl-10__diffusion_pytorch_model.fp16.safetensors	158060440	00992515291c902430d78ecece8a936406338faa54fd06c26da277d96a171fa4
+https://huggingface.co/TencentARC/t2i-adapter-openpose-sdxl-1.0/resolve/main/diffusion_pytorch_model.safetensors	controlnet	TencentARC__t2i-adapter-openpose-sdxl-10__diffusion_pytorch_model.safetensors	316116784	24c55f4b4f4903a50caaae7e3e11f4008bd51d24041385a5ca94e8d05be6311e
+
+# --- comfyui_controlnet_aux preprocessor weights (ckpts/<repo>/<file>, exactly where custom_hf_download looks) ---
+https://huggingface.co/lllyasviel/Annotators/resolve/main/sk_model.pth	controlnet_aux_ckpts/lllyasviel/Annotators	sk_model.pth	17173511	c686ced2a666b4850b4bb6ccf0748031c3eda9f822de73a34b8979970d90f0c6
+https://huggingface.co/lllyasviel/Annotators/resolve/main/sk_model2.pth	controlnet_aux_ckpts/lllyasviel/Annotators	sk_model2.pth	17173511	30a534781061f34e83bb9406b4335da4ff2616c95d22a585c1245aa8363e74e0
+https://huggingface.co/lllyasviel/Annotators/resolve/main/ControlNetHED.pth	controlnet_aux_ckpts/lllyasviel/Annotators	ControlNetHED.pth	29444406	5ca93762ffd68a29fee1af9d495bf6aab80ae86f08905fb35472a083a4c7a8fa
+https://huggingface.co/lllyasviel/Annotators/resolve/main/table5_pidinet.pth	controlnet_aux_ckpts/lllyasviel/Annotators	table5_pidinet.pth	2871148	80860ac267258b5f27486e0ef152a211d0b08120f62aeb185a050acc30da486c
+https://huggingface.co/depth-anything/Depth-Anything-V2-Large/resolve/main/depth_anything_v2_vitl.pth	controlnet_aux_ckpts/depth-anything/Depth-Anything-V2-Large	depth_anything_v2_vitl.pth	1341395338	a7ea19fa0ed99244e67b624c72b8580b7e9553043245905be58796a608eb9345
+https://huggingface.co/yzd-v/DWPose/resolve/main/yolox_l.onnx	controlnet_aux_ckpts/yzd-v/DWPose	yolox_l.onnx	216746733	7860ae79de6c89a3c1eb72ae9a2756c0ccfbe04b7791bb5880afabd97855a411
+https://huggingface.co/yzd-v/DWPose/resolve/main/dw-ll_ucoco_384.onnx	controlnet_aux_ckpts/yzd-v/DWPose	dw-ll_ucoco_384.onnx	134399116	724f4ff2439ed61afb86fb8a1951ec39c6220682803b4a8bd4f598cd913b1843
+https://huggingface.co/hr16/DWPose-TorchScript-BatchSize5/resolve/main/dw-ll_ucoco_384_bs5.torchscript.pt	controlnet_aux_ckpts/hr16/DWPose-TorchScript-BatchSize5	dw-ll_ucoco_384_bs5.torchscript.pt	135059124	d86a0b2b59fddc0901a7076e9f59c9f8602602133ed72511c693fd11eea23d91
+
+# --- Impact-Pack / Impact-Subpack detectors + SAM ---
+https://huggingface.co/Bingsu/adetailer/resolve/main/face_yolov8m.pt	ultralytics/bbox	face_yolov8m.pt	52026019	717923c19b3f4bbf5250b728f1fa6b2cb72a33aed1d236ea9caf0e21ad943e5f
+https://huggingface.co/Bingsu/adetailer/resolve/main/hand_yolov8n.pt	ultralytics/bbox	hand_yolov8n.pt	6237883	3991202eb69e9ddcb3b9ba80cdeb41e734ffaf844403d6c9f47d515cd88c6f29
+https://huggingface.co/Bingsu/adetailer/resolve/main/person_yolov8m-seg.pt	ultralytics/segm	person_yolov8m-seg.pt	54827683	c8ab26f517173b1fe8342d336a09f443eb61cb08dcbfc78d53fff4c2547ae81e
+https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth	sams	sam_vit_b_01ec64.pth	375042383	ec2df62732614e57411cdcf32a23ffdf28910380d03139ee0f4fcbe91eb8c912
+
+# --- IPAdapter (cubiq) ---
+https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors	ipadapter	ip-adapter-plus_sdxl_vit-h.safetensors	847517512	3f5062b8400c94b7159665b21ba5c62acdcd7682262743d7f2aefedef00e6581
+https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter_sdxl_vit-h.safetensors	ipadapter	ip-adapter_sdxl_vit-h.safetensors	698391064	ebf05d918348aec7abb02a5e9ecef77e0aaea6914a5c4ea13f50d45eb1681831
+https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors	clip_vision	CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors	2528373448	6ca9667da1ca9e0b0f75e46bb030f7e011f44f86cbfb8d5a36590fcd7507b030
+# --- ImageLab Style tab (2026-10-20): every reference type's files, picked by name (lib/styleRefs.ts pickModel / pickLora /
+#     pickControlnet). SD 1.5 + SDXL style / subject (PLUS), SD 1.5 composition (ostris), FaceID Plus v2 + its LoRAs, FaceID
+#     Portrait, InstantID (SDXL; its ControlNet in controlnet/instantid/, the name the pack's examples use) and its antelopev2
+#     face model, PuLID SDXL. buffalo_l (FaceID's face model) is fetched by insightface itself on first use. ~9.6 GB.
+https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus_sd15.safetensors	ipadapter	ip-adapter-plus_sd15.safetensors	98183288	a1c250be40455cc61a43da1201ec3f1edaea71214865fb47f57927e06cbe4996
+https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter_sd15.safetensors	ipadapter	ip-adapter_sd15.safetensors	44642768	289b45f16d043d0bf542e45831f971dcdaabe18b656f11e86d9dfba7e9ee3369
+https://huggingface.co/ostris/ip-composition-adapter/resolve/main/ip_plus_composition_sd15.safetensors	ipadapter	ip_plus_composition_sd15.safetensors	98183728	4a02c9f4d2ade7c0e14db7471377ce5d326a2bfda7777231c79dc861c93f2c12
+https://huggingface.co/ostris/ip-composition-adapter/resolve/main/ip_plus_composition_sdxl.safetensors	ipadapter	ip_plus_composition_sdxl.safetensors	847517960	e92dc36cc273bac3200b2e41807ebdc174076185d95a45238558d4c236b6da74
+https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sd15.bin	ipadapter	ip-adapter-faceid-plusv2_sd15.bin	156558509	26d0d86a1d60d6cc811d3b8862178b461e1eeb651e6fe2b72ba17aa95411e313
+https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sdxl.bin	ipadapter	ip-adapter-faceid-plusv2_sdxl.bin	1487555181	c6945d82b543700cc3ccbb98d363b837e9c596281607857c74b713a876daf5fb
+https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-portrait_sdxl.bin	ipadapter	ip-adapter-faceid-portrait_sdxl.bin	749822515	5631ce7824cdafd2db37c5e85b985730a95ff59c5b4fc80c2b79b0bee5711512
+https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-portrait-v11_sd15.bin	ipadapter	ip-adapter-faceid-portrait-v11_sd15.bin	64586623	a48cb4f89ed18e02c6000f65aa9efec452e87eaed4a1bc9fcf4a460c8d0e3bc6
+https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sd15_lora.safetensors	loras	ip-adapter-faceid-plusv2_sd15_lora.safetensors	51059544	8abff87a15a049f3e0186c2e82c1c8e77783baf2cfb63f34c412656052eb57b0
+https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sdxl_lora.safetensors	loras	ip-adapter-faceid-plusv2_sdxl_lora.safetensors	371842896	f24b4bb2dad6638a09c00f151cde84991baf374409385bcbab53c1871a30cb7b
+https://huggingface.co/InstantX/InstantID/resolve/main/ip-adapter.bin	instantid	ip-adapter.bin	1691134141	02b3618e36d803784166660520098089a81388e61a93ef8002aa79a5b1c546e1
+https://huggingface.co/InstantX/InstantID/resolve/main/ControlNetModel/diffusion_pytorch_model.safetensors	controlnet/instantid	diffusion_pytorch_model.safetensors	2502139136	c8127be9f174101ebdafee9964d856b49b634435cf6daa396d3f593cf0bbbb05
+https://huggingface.co/DIAMONIK7777/antelopev2/resolve/main/1k3d68.onnx	insightface/models/antelopev2	1k3d68.onnx	143607619	df5c06b8a0c12e422b2ed8947b8869faa4105387f199c477af038aa01f9a45cc
+https://huggingface.co/DIAMONIK7777/antelopev2/resolve/main/2d106det.onnx	insightface/models/antelopev2	2d106det.onnx	5030888	f001b856447c413801ef5c42091ed0cd516fcd21f2d6b79635b1e733a7109dbf
+https://huggingface.co/DIAMONIK7777/antelopev2/resolve/main/genderage.onnx	insightface/models/antelopev2	genderage.onnx	1322532	4fde69b1c810857b88c64a335084f1c3fe8f01246c9a191b48c7bb756d6652fb
+https://huggingface.co/DIAMONIK7777/antelopev2/resolve/main/glintr100.onnx	insightface/models/antelopev2	glintr100.onnx	260665334	4ab1d6435d639628a6f3e5008dd4f929edf4c4124b1a7169e1048f9fef534cdf
+https://huggingface.co/DIAMONIK7777/antelopev2/resolve/main/scrfd_10g_bnkps.onnx	insightface/models/antelopev2	scrfd_10g_bnkps.onnx	16923827	5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91
+https://huggingface.co/huchenlei/ipadapter_pulid/resolve/main/ip-adapter_pulid_sdxl_fp16.safetensors	pulid	ip-adapter_pulid_sdxl_fp16.safetensors	791372856	b258a5cd2c0c7d35f4d3e59909d7648498686afae4d0c74917e9c47d7704fbf5
+# Flux Redux (Style tab, Flux models): the SigLIP vision model is public; flux1-redux-dev is gated on Hugging Face (401
+# without a token, and download-models.sh sends none), so it stays out until there is an ungated mirror or an HF token here.
+https://huggingface.co/Comfy-Org/sigclip_vision_384/resolve/main/sigclip_vision_patch14_384.safetensors	clip_vision	sigclip_vision_patch14_384.safetensors	856505640	1fee501deabac72f0ed17610307d7131e3e9d1e838d0363aa3c2b97a6e03fb33
+# https://huggingface.co/black-forest-labs/FLUX.1-Redux-dev/resolve/main/flux1-redux-dev.safetensors	style_models	flux1-redux-dev.safetensors	129063232
+
+# --- WD14 tagger (the pack's models/ dir is symlinked to models/wd14_tagger by start.sh) ---
+https://huggingface.co/SmilingWolf/wd-v1-4-moat-tagger-v2/resolve/main/model.onnx	wd14_tagger	wd-v1-4-moat-tagger-v2.onnx	326197340	b8cef913be4c9e8d93f9f903e74271416502ce0b4b04df0ff1e2f00df488aa03
+https://huggingface.co/SmilingWolf/wd-v1-4-moat-tagger-v2/resolve/main/selected_tags.csv	wd14_tagger	wd-v1-4-moat-tagger-v2.csv	253906	8c8750600db36233a1b274ac88bd46289e588b338218c2e4c62bbc9f2b516368
+https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3/resolve/main/model.onnx	wd14_tagger	wd-eva02-large-tagger-v3.onnx	1260435999	9e768793060c7939b277ccb382783e8670e8a042d29d77aa736be0c8cc898bfc
+https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3/resolve/main/selected_tags.csv	wd14_tagger	wd-eva02-large-tagger-v3.csv	308468	298633d94d0031d2081c0893f29c82eab7f0df00b08483ba8f29d1e979441217
+
+# --- Face restore (facerestore_cf; ImageLab's Edit tools, Face restore). CodeFormer, since the tool's fidelity slider is
+#     CodeFormer's. The pack downloads its detector and face parser into models/facedetection on first use; listing them
+#     here means a worker with a read-only or offline models share still has them. All three from the pack's README links.
+https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth	facerestore_models	codeformer.pth	376637898	1009e537e0c2a07d4cabce6355f53cb66767cd4b4297ec7a4a64ca4b8a5684b7
+https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth	facedetection	detection_Resnet50_Final.pth	109497761	6d1de9c2944f2ccddca5f5e010ea5ae64a39845a86311af6fdf30841b0a5a16d
+https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/parsing_parsenet.pth	facedetection	parsing_parsenet.pth	85331193	3d558d8d0e42c20224f13cf5a29c79eba2d59913419f945545d8cf7b72920de2
+
+# --- Upscalers (2x-AnimeJaNai has no stable HF home; skipped) ---
+https://huggingface.co/Kim2091/AnimeSharp/resolve/main/4x-AnimeSharp.pth	upscale_models	4x-AnimeSharp.pth	67010245	e7a7de2dafd7331c1992862bbbcd9e9712a9f9f8e6303f0aaa59b4341d359bab

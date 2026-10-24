@@ -10,7 +10,8 @@ on:
     paths:
       - Dockerfile
       - install-node.sh
-      - models.txt
+      - packs/**
+      - scripts/container-test.sh
       - download-models.sh
       - start.sh
       - agent.sh
@@ -71,3 +72,18 @@ jobs:
           tags: ${{ steps.tags.outputs.list }}
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
+
+  # The image just pushed, run without a GPU: gpu-agent at the pin and no imagelab-agent, agent.sh's yaml from the
+  # env (two links / legacy pair / none), download-models.sh's packs and sha256 check (scripts/container-test.sh).
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: docker pull "$IMAGE:$GITHUB_SHA"
+      - run: scripts/container-test.sh "$IMAGE:$GITHUB_SHA"

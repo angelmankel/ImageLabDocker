@@ -33,7 +33,7 @@ cd ~/Github/ImageLabProject && set -a && . ./.env && set +a
 | | |
 |---|---|
 | `Dockerfile`, `start.sh`, `nginx.conf.template`, `live.py`, `app/` | the image; a change here needs a rebuild (~10 min via Actions) |
-| `models.txt` | every model a pod downloads on first boot (~87 GB) |
+| `packs/*.tsv` | the model packs a pod downloads on first boot, picked with `MODEL_PACKS` (`image` ~96 GB, `video` ~147 GB, `3d` ~45 GB; `url, folder, name, bytes, sha256`) |
 | `workflows/` | ComfyUI workflows, seeded onto each pod at boot |
 | `scripts/` | drive a pod: push code, pull images, sync workflows, verify |
 

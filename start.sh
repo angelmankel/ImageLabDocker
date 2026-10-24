@@ -33,6 +33,8 @@ wd=/opt/ComfyUI/custom_nodes/ComfyUI-WD14-Tagger
 if [ -d "$wd" ] && [ ! -L "$wd/models" ]; then
   rm -rf "$wd/models"; ln -s "$MODELS_DIR/wd14_tagger" "$wd/models"
 fi
+# Map Maker's UltraTex decoder folder (pack 3d): the node registers models/ultratex at import, so it must exist by then.
+mkdir -p "$MODELS_DIR/ultratex"
 # ---- ImageLabCore on the volume, so it can be changed without an image rebuild ------
 # Same trade the app already makes: a custom node baked into the image costs a ten minute build
 # and a pod resume for every one-line change. On the volume it can be written to while the pod
@@ -127,6 +129,8 @@ nginx -c /tmp/nginx.conf &
 echo "[start] nginx listening on 0.0.0.0:$PROXY_PORT (basic auth user '$COMFY_AUTH_USER') -> 127.0.0.1:$COMFY_PORT"
 
 # ---- models (background, retried; log served at /pod/logs/download.log through the proxy) ----
+# Which files: MODEL_PACKS=image,video,3d (default image; packs/*.tsv) or MANIFEST=<file> (download-models.sh).
+# Add-only with a sha256 check; HF_TOKEN for the gated file of the 3d pack; models-complete once all landed.
 LOG_DIR=/workspace/imagelab-logs
 mkdir -p "$LOG_DIR"
 rm -f "$LOG_DIR/models-complete"   # stale marker from a previous boot must not report completion
@@ -325,10 +329,11 @@ else
     | tee -a "$LOG_DIR/comfy-video.log"
 fi
 
-# ---- the ImageLab agent: this pod as a worker of the ImageLab server ------------------------------
-# Only with IMAGELAB_SERVER_URL + IMAGELAB_WORKER_TOKEN in the pod env (agent.sh says "off" without
-# them; gpu-server runs this image with its own agent beside it). One agent per ComfyUI above, each
-# waits for its ComfyUI. Logs: /pod/logs/agent.log (and agent-2.log for the second ComfyUI).
+# ---- the agent (gpu-agent): this pod as one worker of the ImageLab and Map Maker hubs -------------
+# Only with a hub token in the pod env: GPU_AGENT_TOKEN_LAB / _MAPS / _MAPS_DEV, or the old pair
+# IMAGELAB_SERVER_URL + IMAGELAB_WORKER_TOKEN (agent.sh says "off" without any; gpu-server runs this
+# image with its own agent beside it). ONE agent: the ComfyUIs above are its engines comfy0 (slot gpu0)
+# and comfy1 (slot gpu1); agent.sh writes /etc/gpu-agent/gpu-agent.yaml from the env. Log: /pod/logs/agent.log.
 LOG_DIR="$LOG_DIR" LLM_PORT="$LLM_PORT" /opt/imagelab/agent.sh "$COMFY_PORT" \
   $([ "$VIDEO_ON" = 1 ] && echo "$VIDEO_PORT") &
 
