@@ -9,6 +9,10 @@ LLM_PORT=${LLM_PORT:-11434}
 VIDEO_PORT=${COMFY_VIDEO_PORT:-8191}
 COMFY_AUTH_USER=${COMFY_AUTH_USER:-imagelab}
 COMFY_ARGS=${COMFY_ARGS:-}
+# Both ComfyUIs run at a lower CPU priority than the agent (nice 10 vs 0, gpu-agent DESIGN §8.2, Server #202): on the
+# #197 test pod a CPU-heavy node (Map Maker's RemeshMesh, solid mode) starved the container and both agent links
+# dropped their heartbeats. Raising the priority needs CAP_SYS_NICE, which a pod does not have; lowering it never does.
+COMFY_NICE=${COMFY_NICE:-10}
 
 if [ -z "${COMFY_AUTH_TOKEN:-}" ]; then
   COMFY_AUTH_TOKEN=$(openssl rand -hex 16)
@@ -131,6 +135,7 @@ echo "[start] nginx listening on 0.0.0.0:$PROXY_PORT (basic auth user '$COMFY_AU
 # ---- models (background, retried; log served at /pod/logs/download.log through the proxy) ----
 # Which files: MODEL_PACKS=image,video,3d (default image; packs/*.tsv) or MANIFEST=<file> (download-models.sh).
 # Add-only with a sha256 check; HF_TOKEN for the gated file of the 3d pack; models-complete once all landed.
+# The agent watches models-complete (agent.sh's `modelsMarker`) and re-advertises the models at once (#202).
 LOG_DIR=/workspace/imagelab-logs
 mkdir -p "$LOG_DIR"
 rm -f "$LOG_DIR/models-complete"   # stale marker from a previous boot must not report completion
@@ -318,7 +323,7 @@ if [ "$VIDEO_ON" = 1 ]; then
     mkdir -p "$VIDEO_DIR"
     while true; do
       echo "starting $(date -u +%FT%TZ)"
-      env $VIDEO_CUDA IMAGELAB_CORE_SECONDARY=1 IMAGELAB_AUTO_DOWNLOAD= python main.py --listen 127.0.0.1 --port "$VIDEO_PORT" \
+      nice -n "$COMFY_NICE" env $VIDEO_CUDA IMAGELAB_CORE_SECONDARY=1 IMAGELAB_AUTO_DOWNLOAD= python main.py --listen 127.0.0.1 --port "$VIDEO_PORT" \
         --preview-method taesd --temp-directory "$VIDEO_DIR" --database-url sqlite:///:memory: \
         $VIDEO_VRAM_ARGS ${COMFY_VIDEO_ARGS:-}
       echo "exited ($?); restarting in 5s"; sleep 5
@@ -337,5 +342,5 @@ fi
 LOG_DIR="$LOG_DIR" LLM_PORT="$LLM_PORT" /opt/imagelab/agent.sh "$COMFY_PORT" \
   $([ "$VIDEO_ON" = 1 ] && echo "$VIDEO_PORT") &
 
-echo "[start] ComfyUI $(cat .pinned-commit 2>/dev/null) on 127.0.0.1:$COMFY_PORT ${IMAGE_CUDA} ${IMAGE_VRAM_ARGS}"
-exec env $IMAGE_CUDA python main.py --listen 127.0.0.1 --port "$COMFY_PORT" --preview-method taesd $IMAGE_VRAM_ARGS $COMFY_ARGS
+echo "[start] ComfyUI $(cat .pinned-commit 2>/dev/null) on 127.0.0.1:$COMFY_PORT ${IMAGE_CUDA} ${IMAGE_VRAM_ARGS} (nice $COMFY_NICE)"
+exec nice -n "$COMFY_NICE" env $IMAGE_CUDA python main.py --listen 127.0.0.1 --port "$COMFY_PORT" --preview-method taesd $IMAGE_VRAM_ARGS $COMFY_ARGS

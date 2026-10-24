@@ -7,7 +7,8 @@
 #   2. agent.sh writes gpu-agent.yaml from the env: 2 links + 2 engines, the legacy pair -> 1 lab link, nothing -> off,
 #      IMAGELAB_WORKER_TOKEN_2 -> a warning; no token value ever appears in the output; the agent accepts the file;
 #   3. download-models.sh: MODEL_PACKS picks the manifests (3d = 11 files), a tiny manifest downloads with a sha256 check,
-#      a wrong hash is refused, an existing file is never overwritten.
+#      a wrong hash is refused, an existing file is never overwritten;
+#   4. start.sh (a CPU boot, no network): both ComfyUIs run at nice 10, the agent at 0 (Server #202, gpu-agent DESIGN §8.2).
 #
 # DOCKER_RUN_ARGS adds `docker run` options, e.g. bind mounts to try this repo's scripts on an older image before CI:
 #   DOCKER_RUN_ARGS="-v $PWD/agent.sh:/opt/imagelab/agent.sh:ro -v ..." scripts/container-test.sh <image>
@@ -20,11 +21,11 @@ EXTRA=(${DOCKER_RUN_ARGS:-})
 fails=0
 run() {  # run <name> [docker env/opts...] -- <bash script>: runs it in a throwaway container, keeps the output in $out and the code in $code
   local name=$1; shift
-  local opts=()
-  while [ $# -gt 0 ] && [ "$1" != -- ]; do opts+=("$1"); shift; done
+  local opts=() net=(--network host)
+  while [ $# -gt 0 ] && [ "$1" != -- ]; do opts+=("$1"); [[ "$1" == --network* ]] && net=(); shift; done
   shift
   set +e
-  out=$(docker run --rm --network host --entrypoint bash "${EXTRA[@]}" "${opts[@]}" "$IMAGE" -c "$1" 2>&1); code=$?
+  out=$(docker run --rm "${net[@]}" --entrypoint bash "${EXTRA[@]}" "${opts[@]}" "$IMAGE" -c "$1" 2>&1); code=$?
   set -e
   echo "--- $name (exit $code)"; echo "$out" | sed 's/^/    /' | head -${SHOW_LINES:-40}
 }
@@ -40,7 +41,7 @@ echo "== image $IMAGE (gpu-agent pin $TAG)"
 
 # ---- 1. the agent binary ---------------------------------------------------------------------------------
 run "gpu-agent --version" -- '/usr/local/bin/gpu-agent --version; test -e /usr/local/bin/imagelab-agent && echo IMAGELAB_AGENT_PRESENT || echo no-imagelab-agent'
-check "gpu-agent --version is the pinned build +$TAG" has "gpu-agent 0.1.0+$TAG"
+check "gpu-agent --version is the pinned build +$TAG" grep -qE "^gpu-agent [0-9]+\.[0-9]+\.[0-9]+\+$TAG\$" <<< "$out"
 check "no imagelab-agent in the image" has "no-imagelab-agent"
 
 # ---- 2. agent.sh -------------------------------------------------------------------------------------------
@@ -58,6 +59,7 @@ check "two engines" [ "$(grep -c 'engine: comfy' <<< "$out")" = 2 ]
 check "gpu 1 for the second" has "gpu: 1"
 check "inputDir / outputDir (#187)" has "inputDir: /workspace/ComfyUI/input"
 check "control attach on a pod" has "control: { mode: attach, pod: true, imageManaged: true }"
+check "modelsMarker = the models-complete file start.sh touches (#202)" [ "$(grep -c 'modelsMarker: /workspace/imagelab-logs/models-complete' <<< "$out")" = 2 ]
 check "costPerHour from WORKER_COST_PER_HOUR" has "costPerHour: 1.5"
 check "no token value in the output" lacks "$T_LAB"
 check "no token value in the output (dev)" lacks "$T_DEV"
@@ -121,6 +123,29 @@ check "run 2: everything present" has "everything present"
 check "wrong hash refused" has "sha256 mismatch for t197/c/config.json"
 check "wrong hash: the run fails (start.sh retries)" has "exit 1"
 check "no .part left in the bad folder" [ "$(grep -A3 '## files' <<< "$out" | grep -c 'config.json')" = 1 ]
+
+# ---- 4. CPU priority: ComfyUI below the agent (#202) ------------------------------------------------------------
+# A real boot on the CPU without network: both ComfyUIs (COMFY_VIDEO=1) and the agent (a fake token, hub at a closed
+# port; AGENT_WAIT_TRIES=1 so it does not wait for ComfyUI's imports). Nice from /proc (no procps in the image).
+run "start.sh: ComfyUI runs at a lower CPU priority than the agent" --network none \
+  -e SKIP_MODEL_DOWNLOAD=1 -e SKIP_LLM=1 -e COMFY_VIDEO=1 -e COMFY_ARGS=--cpu -e AGENT_WAIT_TRIES=1 \
+  -e GPU_AGENT_TOKEN_LAB="$T_LAB" -e GPU_AGENT_URL_LAB=ws://127.0.0.1:9/agent -- '
+    /opt/imagelab/start.sh > /tmp/start.log 2>&1 &
+    pid_of() { for d in /proc/[0-9]*; do c=$(tr "\0" " " < "$d/cmdline" 2>/dev/null); case "$c" in "$1"*) echo "${d#/proc/}"; return;; esac; done; }
+    nice_of() { awk "{print \$19}" "/proc/$1/stat"; }
+    for _ in $(seq 1 150); do
+      img=$(pid_of "python main.py --listen 127.0.0.1 --port 8189"); vid=$(pid_of "python main.py --listen 127.0.0.1 --port 8191")
+      agent=$(pid_of "/usr/local/bin/gpu-agent --config")
+      [ -n "$img" ] && [ -n "$vid" ] && [ -n "$agent" ] && break
+      sleep 2
+    done
+    echo "nice comfy0=$(nice_of "${img:-0}" 2>/dev/null) comfy1=$(nice_of "${vid:-0}" 2>/dev/null) agent=$(nice_of "${agent:-0}" 2>/dev/null)"
+    grep -F "(nice 10)" /tmp/start.log'
+check "the image ComfyUI (:8189) at nice 10" has "comfy0=10 "
+check "the video ComfyUI (:8191) at nice 10" has "comfy1=10 "
+check "the agent at nice 0" has "agent=0"
+check "start.sh logs the nice" has "(nice 10)"
+check "no token value in the boot output" lacks "$T_LAB"
 
 echo
 if [ "$fails" = 0 ]; then echo "== container test passed"; else echo "== container test: $fails check(s) FAILED"; exit 1; fi

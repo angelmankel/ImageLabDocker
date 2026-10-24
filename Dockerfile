@@ -6,7 +6,7 @@
 # main). That image is the compiled single executable on a small Debian; only the executable is taken. The
 # registry is public (anonymous pull), so the build needs no login. Move the pin to a sha whose Image run is
 # green, ideally the one gpu-server's sidecar runs (imagelab-server docs/workers.md).
-ARG GPU_AGENT_TAG=4d201d0
+ARG GPU_AGENT_TAG=2694ebb
 FROM gitea.dev.blueoceanswim.com/donny/gpu-agent:${GPU_AGENT_TAG} AS agent
 
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
@@ -153,7 +153,7 @@ RUN git clone --depth 1 https://github.com/angelmankel/ImageLab /tmp/imagelab \
 RUN chmod +x /opt/imagelab/download-models.sh /opt/imagelab/start.sh /opt/imagelab/agent.sh
 
 # The agent runs only when the pod env has a hub token (agent.sh). --version proves the executable runs on this
-# base (glibc, CA roots) at build time, not on a billing pod, and that it is the pinned build (`0.1.0+<sha>`).
+# base (glibc, CA roots) at build time, not on a billing pod, and that it is the pinned build (`<version>+<sha>`).
 # The old protocol-1 imagelab-agent is gone from the image: one gpu-agent serves both ComfyUIs and every hub.
 ARG GPU_AGENT_TAG
 COPY --from=agent /usr/local/bin/gpu-agent /usr/local/bin/gpu-agent

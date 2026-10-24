@@ -311,6 +311,7 @@ route and no repointing after a resume. Each ComfyUI `start.sh` launched is an e
 | URL | `http://127.0.0.1:$COMFY_PORT` (loopback: no nginx, no basic auth) | `http://127.0.0.1:$COMFY_VIDEO_PORT` |
 | `inputDir` / `outputDir` | `/workspace/ComfyUI/input` / `/workspace/ComfyUI/output` (a job's inputs and the files its save nodes wrote are deleted after the job, gpu-agent #187) | the same folders |
 | control | `attach`, `pod: true`, `imageManaged: true` (update / install-node refused; restart = ComfyUI-Manager's soft reboot) | the same |
+| `modelsMarker` | `/workspace/imagelab-logs/models-complete` (gpu-agent 0.1.3, Server #202) | the same |
 
 `agent.sh` writes all this to `/etc/gpu-agent/gpu-agent.yaml` at every boot. **Tokens never go into
 the file**: it says `token: env:GPU_AGENT_TOKEN_LAB` and the agent reads the variable, so the file can
@@ -321,15 +322,29 @@ them. The pod's Ollama is reported through the agent's `imagelab` extension (`OL
 runs in a restart loop (10 s); log `/pod/logs/agent.log` (`AGENT_LOG_LEVEL`, `AGENT_LOG_FORMAT=text|json`).
 Its work folder (job inputs) is `/workspace/gpu-agent` on the volume.
 
+**Models that land after boot** (gpu-agent 0.1.3, Server #202): the agent re-reads the model list
+(ImageLabCore's hash index + ComfyUI's `/models` folders) every 60 s and re-sends its capabilities to every
+hub when it changed, and it watches `models-complete`: `start.sh` deletes that file at boot and touches it
+when `download-models.sh` succeeds, and within ~2 s the hubs have the full list. No `control.restart`
+needed any more. A finished hash (ImageLabCore's `pending` → hashed) also goes out within 60 s.
+
+**CPU priority** (Server #202, gpu-agent DESIGN §8.2): both ComfyUIs run at `nice 10`
+(`COMFY_NICE`, default 10), the agent and everything else at 0. On the #197 pod a CPU-heavy Map Maker
+node (`RemeshMesh`, solid mode) starved the container and the agent's links dropped (lab closed 1006,
+maps-dev 31 s without a message); the same graph on gpu-server ran with the heartbeats flowing. A pod
+has no `CAP_SYS_NICE`, so the agent cannot be raised; ComfyUI is lowered instead, which costs it nothing
+while the agent is idle. The container test boots the image on the CPU and checks the nice of both
+ComfyUI processes (10) and the agent (0).
+
 Checked (Server #197): the container test `scripts/container-test.sh` (CI job `test`) proves the yaml for
-two tokens + two ComfyUIs, one token, the legacy pair, none (`[agent] off`), the `_2` warnings, and that
-the agent accepts the file. Live, 2026-10-24, one L4 secure pod in US-MO-2 ($0.59/h, 45 min, ≈ $0.47):
+two tokens + two ComfyUIs, one token, the legacy pair, none (`[agent] off`), the `_2` warnings, the
+`modelsMarker`, that the agent accepts the file, and the ComfyUI / agent nice values on a CPU boot. Live, 2026-10-24, one L4 secure pod in US-MO-2 ($0.59/h, 45 min, ≈ $0.47):
 container up 3 min 30 s after create, the agent on both hubs (lab `runpod-197`, maps-dev `gw-test-197`)
 at 3 min 47 s, `GET /workers` one worker, `protocol 2`, slot `gpu0` at $0.59/h; an 11.09 GB trimmed
 manifest in 10 min 10 s (≈ 18 MB/s with sha256); a pinned 512 px / 4-step SD 1.5 job done in 6 s. Two
-things to know: (1) the agent advertises models only on connect and after a ComfyUI restart, so models
-that land after boot show up on the hubs only after lab's `control.restart` (20 s) — a gpu-agent
-follow-up; (2) the Map Maker dev hub went silent 31 s during an 8-minute TRELLIS.2 job, the agent
+things found there: (1) the agent advertised models only on connect and after a ComfyUI restart, so models
+that landed after boot showed up on the hubs only after lab's `control.restart` (20 s) — fixed in gpu-agent
+0.1.3 (above); (2) the Map Maker dev hub went silent 31 s during an 8-minute TRELLIS.2 job, the agent
 reopened that link and the hub did not resume the job (cancelled) — a Map Maker hub follow-up; lab's
 link never dropped. Details and timings in the ticket.
 

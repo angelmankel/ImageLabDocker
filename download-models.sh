@@ -11,6 +11,12 @@
 # is checked for bytes and sha256, and only then gets its name; a wrong hash is refused and the part deleted.
 # Re-runs resume partial downloads (aria2's control file sits beside the .part).
 #
+# Exit 0 = every file of the manifests is present and verified. start.sh then touches
+# /workspace/imagelab-logs/models-complete (= /pod/logs/models-complete), which the agent watches
+# (`modelsMarker` in gpu-agent.yaml, written by agent.sh): it re-reads the model list at once and the hubs
+# see the new models within a few seconds (gpu-agent 0.1.3, Server #202). Files that land before that
+# are picked up by the agent's 60 s check.
+#
 # Tokens: `civitai:<versionId>` rows need CIVITAI_API_KEY; HF_TOKEN (optional) is sent to huggingface.co only,
 # for gated files (3d.tsv's flux-2-klein-9b-fp8). Both only ever go into a mode-600 temp file and the request.
 set -uo pipefail
