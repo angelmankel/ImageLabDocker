@@ -58,8 +58,8 @@ fi
 # Slot gpu0 is the image ComfyUI, gpu1 the video one; these are the worker's slots (what a hub dispatches to), not
 # nvidia-smi indexes: on a shared card both still run at once, as start.sh set them up. inputDir/outputDir let the
 # agent delete a job's inputs and the files its save nodes wrote (#187). modelsMarker: start.sh touches it when the
-# model download is complete, and the agent re-sends its model list to every hub at once (gpu-agent 0.1.3, Server
-# #202; besides its own 60 s check). control attach + pod: image-managed (the hub's update / install-node are
+# model download is complete, and the agent re-checks its model list at once, then every 3 s until ImageLabCore has
+# indexed and hashed every file (gpu-agent 0.1.4, Server #202; besides its own 60 s check). control attach + pod: image-managed (the hub's update / install-node are
 # refused; restart is ComfyUI-Manager's soft reboot).
 engine() {  # engine <id> <gpu> <port>
   cat <<EOF

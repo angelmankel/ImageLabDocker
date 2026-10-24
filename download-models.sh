@@ -13,9 +13,10 @@
 #
 # Exit 0 = every file of the manifests is present and verified. start.sh then touches
 # /workspace/imagelab-logs/models-complete (= /pod/logs/models-complete), which the agent watches
-# (`modelsMarker` in gpu-agent.yaml, written by agent.sh): it re-reads the model list at once and the hubs
-# see the new models within a few seconds (gpu-agent 0.1.3, Server #202). Files that land before that
-# are picked up by the agent's 60 s check.
+# (`modelsMarker` in gpu-agent.yaml, written by agent.sh): it re-reads the model list at once, then every 3 s
+# until ImageLabCore has indexed (its scan runs every 30 s) and hashed every file, so the hubs see each new
+# model within ~3 s of ImageLabCore listing it (gpu-agent 0.1.4, Server #202). Files that land before that
+# are picked up by the agent's 60 s check, which opens the same 3 s window.
 #
 # Tokens: `civitai:<versionId>` rows need CIVITAI_API_KEY; HF_TOKEN (optional) is sent to huggingface.co only,
 # for gated files (3d.tsv's flux-2-klein-9b-fp8). Both only ever go into a mode-600 temp file and the request.
