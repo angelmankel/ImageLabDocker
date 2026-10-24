@@ -323,7 +323,15 @@ Its work folder (job inputs) is `/workspace/gpu-agent` on the volume.
 
 Checked (Server #197): the container test `scripts/container-test.sh` (CI job `test`) proves the yaml for
 two tokens + two ComfyUIs, one token, the legacy pair, none (`[agent] off`), the `_2` warnings, and that
-the agent accepts the file; the live pod check is recorded in the ticket.
+the agent accepts the file. Live, 2026-10-24, one L4 secure pod in US-MO-2 ($0.59/h, 45 min, ≈ $0.47):
+container up 3 min 30 s after create, the agent on both hubs (lab `runpod-197`, maps-dev `gw-test-197`)
+at 3 min 47 s, `GET /workers` one worker, `protocol 2`, slot `gpu0` at $0.59/h; an 11.09 GB trimmed
+manifest in 10 min 10 s (≈ 18 MB/s with sha256); a pinned 512 px / 4-step SD 1.5 job done in 6 s. Two
+things to know: (1) the agent advertises models only on connect and after a ComfyUI restart, so models
+that land after boot show up on the hubs only after lab's `control.restart` (20 s) — a gpu-agent
+follow-up; (2) the Map Maker dev hub went silent 31 s during an 8-minute TRELLIS.2 job, the agent
+reopened that link and the hub did not resume the job (cancelled) — a Map Maker hub follow-up; lab's
+link never dropped. Details and timings in the ticket.
 
 ## Host setup for a GPU worker (gpu-server, any new box)
 
