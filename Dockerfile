@@ -6,7 +6,7 @@
 # main). That image is the compiled single executable on a small Debian; only the executable is taken. The
 # registry is public (anonymous pull), so the build needs no login. Move the pin to a sha whose Image run is
 # green, ideally the one gpu-server's sidecar runs (imagelab-server docs/workers.md).
-ARG GPU_AGENT_TAG=b950a45
+ARG GPU_AGENT_TAG=be2c994
 FROM gitea.dev.blueoceanswim.com/donny/gpu-agent:${GPU_AGENT_TAG} AS agent
 
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
