@@ -59,7 +59,9 @@ fi
 # nvidia-smi indexes: on a shared card both still run at once, as start.sh set them up. inputDir/outputDir let the
 # agent delete a job's inputs and the files its save nodes wrote (#187). modelsMarker: start.sh touches it when the
 # model download is complete, and the agent re-checks its model list at once, then every 3 s until ImageLabCore has
-# indexed and hashed every file (gpu-agent 0.1.4, Server #202; besides its own 60 s check). control attach + pod: image-managed (the hub's update / install-node are
+# indexed and hashed every file (gpu-agent 0.1.4, Server #202; besides its own 60 s check). startupDownloads: the
+# status file download-models.sh appends to (start.sh), which the agent shows in ImageLab's Download queue (gpu-agent
+# 0.1.5; an older agent ignores the key). control attach + pod: image-managed (the hub's update / install-node are
 # refused; restart is ComfyUI-Manager's soft reboot).
 engine() {  # engine <id> <gpu> <port>
   cat <<EOF
@@ -70,6 +72,7 @@ engine() {  # engine <id> <gpu> <port>
     inputDir: $INPUT_DIR
     outputDir: $OUTPUT_DIR
     modelsMarker: $LOG_DIR/models-complete
+    startupDownloads: $LOG_DIR/startup-downloads.tsv
     control: { mode: attach, pod: true, imageManaged: true }
 EOF
 }

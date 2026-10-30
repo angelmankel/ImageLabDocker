@@ -20,11 +20,82 @@
 #
 # Tokens: `civitai:<versionId>` rows need CIVITAI_API_KEY; HF_TOKEN (optional) is sent to huggingface.co only,
 # for gated files (3d.tsv's flux-2-klein-9b-fp8). Both only ever go into a mode-600 temp file and the request.
+#
+# ImageLab's Download queue (gpu-agent 0.1.5): with DOWNLOAD_STATUS=<file> (start.sh: /pod/logs/startup-downloads.tsv,
+# deleted at boot) every change of a file to fetch is appended there as one tab-separated line, which the agent reads
+# (`startupDownloads` in gpu-agent.yaml) and sends to the hubs as download.progress:
+#   run <id>                                       once, when the file is new: every attempt of one boot shares it
+#   queued <folder> <name> <bytes> <path>          to be fetched; the agent reads the progress from <path>.part
+#   done   <folder> <name> <bytes> <path>          checked and in place under its name
+#   failed <folder> <name> <bytes> <path> <why>    not fetched by this attempt (start.sh tries again)
+# Each file is checked as soon as aria2 has it (aria2 runs this script as its --on-download-complete hook), so it
+# lands, and shows done, without waiting for the rest of the batch.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 MODELS_DIR=${MODELS_DIR:-/workspace/ComfyUI/models}
 PACKS_DIR=${PACKS_DIR:-$here/packs}
 PARALLEL=${DOWNLOAD_PARALLEL:-6}
+STATUS=${DOWNLOAD_STATUS:-}
+[ "${DOWNLOAD_DRY_RUN:-0}" = 1 ] && STATUS=   # the container test's dry run reports nothing
+urls=(); folders=(); names=(); sizes=(); shas=()
+
+status() {  # status <state> <i> [why]: one line for the agent (see above); nothing without DOWNLOAD_STATUS
+  [ -n "$STATUS" ] || return 0
+  local why=${3:-}
+  why=$(printf '%s' "$why" | tr '\t\n' '  ')
+  printf '%s\t%s\t%s\t%s\t%s%s\n' "$1" "${folders[$2]}" "${names[$2]}" "${sizes[$2]}" "$MODELS_DIR/${folders[$2]}/${names[$2]}" \
+    "${why:+$(printf '\t%s' "$why")}" >> "$STATUS" 2>/dev/null || true
+}
+
+# finish_part <i>: the downloaded <name>.part becomes <name> if its bytes and sha256 are right. 0 = the file is in place.
+# One check per file at a time: aria2's completion hook and the run's own pass after aria2 may meet on the same file.
+finish_part() {
+  if [ -n "${DL_WORK:-}" ] && [ -d "$DL_WORK" ] && command -v flock >/dev/null 2>&1; then
+    ( flock 9; finish_part_now "$1" ) 9>"$DL_WORK/lock.$1"
+  else
+    finish_part_now "$1"
+  fi
+}
+finish_part_now() {
+  local i=$1 dir path part actual got
+  dir="$MODELS_DIR/${folders[$i]}"; path="$dir/${names[$i]}"; part="$path.part"
+  if [ -f "$path" ]; then rm -f "$part" "$part.aria2"; return 0; fi   # appeared meanwhile (another run): keep it, never overwrite
+  [ -f "$part" ] || return 1
+  [ -f "$part.aria2" ] && return 1                                   # aria2 is not done with it; resumes next run
+  actual=$(stat -c %s "$part")
+  if [ "$actual" != "${sizes[$i]}" ]; then
+    echo "[models] !! size mismatch for ${folders[$i]}/${names[$i]} ($actual != ${sizes[$i]}); removed" >&2
+    rm -f "$part"; return 1
+  fi
+  if [ "${shas[$i]}" != - ]; then
+    got=$(sha256sum "$part" | cut -d' ' -f1)
+    if [ "$got" != "${shas[$i]}" ]; then
+      echo "[models] !! sha256 mismatch for ${folders[$i]}/${names[$i]} (got ${got:0:12}..., want ${shas[$i]:0:12}...); refused and removed" >&2
+      rm -f "$part"; return 1
+    fi
+  fi
+  mv -n "$part" "$path"                      # -n: if the name appeared since the check, that file stays and the part goes
+  if [ -f "$part" ]; then rm -f "$part"; return 0; fi
+  echo "[models] added   ${folders[$i]}/${names[$i]}$([ "${shas[$i]}" = - ] && echo ' (size checked, no sha256 in the manifest)')"
+  status done "$i"
+}
+
+# ---- aria2's --on-download-complete hook: <gid> <number of files> <path of the .part> -------------------------------
+# Run by aria2 (asynchronously) for each finished file, with this run's rows in $DL_WORK/rows.tsv. It checks that one
+# file now; anything it cannot settle (aria2 still holding the control file, a bad hash) the run's own pass after
+# aria2 takes over, as before.
+if [ -n "${DL_WORK:-}" ] && [ $# = 3 ]; then
+  [ -f "$DL_WORK/rows.tsv" ] || exit 0
+  done_part=$(readlink -m -- "$3")
+  while IFS=$'\t' read -r i folder name size sha path; do
+    [ "$(readlink -m -- "$path.part")" = "$done_part" ] || continue
+    folders[$i]=$folder; names[$i]=$name; sizes[$i]=$size; shas[$i]=$sha
+    for _ in $(seq 1 30); do [ -f "$3.aria2" ] || break; sleep 1; done   # aria2 drops its control file as it finishes
+    finish_part "$i" || true
+    break
+  done < "$DL_WORK/rows.tsv"
+  exit 0
+fi
 
 # ---- which manifests --------------------------------------------------------------------------------
 manifests=()
@@ -43,7 +114,6 @@ else
 fi
 
 # ---- read the rows ----------------------------------------------------------------------------------
-urls=(); folders=(); names=(); sizes=(); shas=()
 declare -A seen
 for m in "${manifests[@]}"; do
   while IFS=$'\t' read -r url folder name size sha _; do
@@ -65,6 +135,9 @@ done
 echo "[models] ${#urls[@]} file(s) in the selected manifests"
 
 mkdir -p "$MODELS_DIR"
+if [ -n "$STATUS" ] && [ ! -s "$STATUS" ]; then   # before the umask: nginx serves it as /pod/logs/startup-downloads.tsv
+  mkdir -p "$(dirname "$STATUS")" && printf 'run\t%s\n' "${DOWNLOAD_RUN:-$(date +%s)}" > "$STATUS" || STATUS=
+fi
 umask 077
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -79,30 +152,6 @@ real_url() {  # real_url <manifest url>: the URL to fetch (`civitai:<versionId>`
 civitai_warned=0  # said once, and only when a civitai row is actually missing
 hf_header() {  # prints the Authorization header for huggingface.co URLs when HF_TOKEN is set, else nothing
   case "$1" in https://huggingface.co/*) [ -z "${HF_TOKEN:-}" ] || echo "Authorization: Bearer $HF_TOKEN" ;; esac
-}
-
-# finish_part <i>: the downloaded <name>.part becomes <name> if its bytes and sha256 are right. 0 = the file is in place.
-finish_part() {
-  local i=$1 dir path part actual got
-  dir="$MODELS_DIR/${folders[$i]}"; path="$dir/${names[$i]}"; part="$path.part"
-  if [ -f "$path" ]; then rm -f "$part" "$part.aria2"; return 0; fi   # appeared meanwhile (another run): keep it, never overwrite
-  [ -f "$part" ] || return 1
-  [ -f "$part.aria2" ] && return 1                                   # aria2 is not done with it; resumes next run
-  actual=$(stat -c %s "$part")
-  if [ "$actual" != "${sizes[$i]}" ]; then
-    echo "[models] !! size mismatch for ${folders[$i]}/${names[$i]} ($actual != ${sizes[$i]}); removed" >&2
-    rm -f "$part"; return 1
-  fi
-  if [ "${shas[$i]}" != - ]; then
-    got=$(sha256sum "$part" | cut -d' ' -f1)
-    if [ "$got" != "${shas[$i]}" ]; then
-      echo "[models] !! sha256 mismatch for ${folders[$i]}/${names[$i]} (got ${got:0:12}..., want ${shas[$i]:0:12}...); refused and removed" >&2
-      rm -f "$part"; return 1
-    fi
-  fi
-  mv -n "$part" "$path"                      # -n: if the name appeared since the check, that file stays and the part goes
-  if [ -f "$part" ]; then rm -f "$part"; return 0; fi
-  echo "[models] added   ${folders[$i]}/${names[$i]}$([ "${shas[$i]}" = - ] && echo ' (size checked, no sha256 in the manifest)')"
 }
 
 # ---- what is missing --------------------------------------------------------------------------------
@@ -120,6 +169,8 @@ for i in "${!urls[@]}"; do
   if [ -f "$path.part" ] && [ ! -f "$path.part.aria2" ] && finish_part "$i"; then continue; fi
   todo+=("$i")
   echo "[models] fetch   ${folders[$i]}/${names[$i]} (${sizes[$i]} bytes)"
+  status queued "$i"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$i" "${folders[$i]}" "${names[$i]}" "${sizes[$i]}" "${shas[$i]}" "$dir/${names[$i]}" >> "$work/rows.tsv"
   case "${urls[$i]}" in civitai:*)
     if [ -z "${CIVITAI_API_KEY:-}" ] && [ "$civitai_warned" = 0 ]; then
       echo "[models] WARNING: CIVITAI_API_KEY is empty; Civitai downloads will fail" >&2; civitai_warned=1
@@ -142,7 +193,9 @@ fi
 
 # ---- aria2, then the check of each file ------------------------------------------------------------------
 echo "[models] downloading ${#todo[@]} file(s) with aria2c ($PARALLEL concurrent, 8 connections each)"
+export DL_WORK="$work" MODELS_DIR DOWNLOAD_STATUS="$STATUS"   # for the hook below (this script again)
 aria2c --input-file="$input" \
+  --on-download-complete="$here/$(basename "$0")" \
   --max-concurrent-downloads="$PARALLEL" \
   --max-connection-per-server=8 --split=8 --min-split-size=8M \
   --continue=true --allow-overwrite=true --auto-file-renaming=false \
@@ -165,10 +218,13 @@ if [ ${#left[@]} -gt 0 ]; then
       hdr=(); h=$(hf_header "${urls[$i]}"); [ -z "$h" ] || hdr=(-H "$h")
       code=$(curl -sS -L --retry 3 --retry-delay 5 --max-time 3600 -A "Mozilla/5.0 (imagelab)" "${hdr[@]}" \
                -o "$path.part" -w "%{http_code}" "$(real_url "${urls[$i]}")" 2>>"$work/curl-errors.log" || true)
-      if [ "$code" = 200 ]; then finish_part "$i" || echo "[models] curl FAILED ${folders[$i]}/${names[$i]} (http 200 but the file did not check out)" >&2
+      if [ "$code" = 200 ]; then
+        finish_part "$i" || { echo "[models] curl FAILED ${folders[$i]}/${names[$i]} (http 200 but the file did not check out)" >&2
+                               status failed "$i" "downloaded, but the size or sha256 did not match"; }
       else
         echo "[models] curl FAILED ${folders[$i]}/${names[$i]} (http $code, $(stat -c %s "$path.part" 2>/dev/null || echo 0) bytes)" >&2
         rm -f "$path.part"
+        status failed "$i" "http $code"
       fi
     ) &
     pids+=($!)

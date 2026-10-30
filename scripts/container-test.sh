@@ -7,7 +7,8 @@
 #   2. agent.sh writes gpu-agent.yaml from the env: 2 links + 2 engines, the legacy pair -> 1 lab link, nothing -> off,
 #      IMAGELAB_WORKER_TOKEN_2 -> a warning; no token value ever appears in the output; the agent accepts the file;
 #   3. download-models.sh: MODEL_PACKS picks the manifests (3d = 11 files), a tiny manifest downloads with a sha256 check,
-#      a wrong hash is refused, an existing file is never overwritten;
+#      a wrong hash is refused, an existing file is never overwritten; DOWNLOAD_STATUS gets the lines the agent shows in
+#      ImageLab's Download queue (real aria2 and its completion hook; scripts/download-status-test.sh is the local test);
 #   4. start.sh (a CPU boot, no network): both ComfyUIs run at nice 10, the agent at 0 (Server #202, gpu-agent DESIGN §8.2).
 #
 # DOCKER_RUN_ARGS adds `docker run` options, e.g. bind mounts to try this repo's scripts on an older image before CI:
@@ -60,6 +61,7 @@ check "gpu 1 for the second" has "gpu: 1"
 check "inputDir / outputDir (#187)" has "inputDir: /workspace/ComfyUI/input"
 check "control attach on a pod" has "control: { mode: attach, pod: true, imageManaged: true }"
 check "modelsMarker = the models-complete file start.sh touches (#202)" [ "$(grep -c 'modelsMarker: /workspace/imagelab-logs/models-complete' <<< "$out")" = 2 ]
+check "startupDownloads = the status file download-models.sh appends to (gpu-agent 0.1.5)" [ "$(grep -c 'startupDownloads: /workspace/imagelab-logs/startup-downloads.tsv' <<< "$out")" = 2 ]
 check "costPerHour from WORKER_COST_PER_HOUR" has "costPerHour: 1.5"
 check "no token value in the output" lacks "$T_LAB"
 check "no token value in the output (dev)" lacks "$T_DEV"
@@ -107,13 +109,14 @@ https://huggingface.co/1038lab/BiRefNet/resolve/main/BiRefNet_config.py	t197/b	B
 BAD='url	folder	name	bytes	sha256
 https://huggingface.co/1038lab/BiRefNet/resolve/main/config.json	t197/c	config.json	402	0000000000000000000000000000000000000000000000000000000000000000'
 run "download-models.sh: a 2-file manifest downloads, checks, then is all present; a wrong hash is refused; an existing file is kept" \
-  -e GOOD="$GOOD" -e BAD="$BAD" -e MODELS_DIR=/tmp/models -e DOWNLOAD_PARALLEL=2 -- '
+  -e GOOD="$GOOD" -e BAD="$BAD" -e MODELS_DIR=/tmp/models -e DOWNLOAD_PARALLEL=2 -e DOWNLOAD_STATUS=/tmp/logs/startup-downloads.tsv -e DOWNLOAD_RUN=197 -- '
     printf "%s\n" "$GOOD" > /tmp/good.tsv; printf "%s\n" "$BAD" > /tmp/bad.tsv
     mkdir -p /tmp/models/t197/b && echo "mine" > /tmp/models/t197/b/BiRefNet_config.py
     echo "## run 1"; MANIFEST=/tmp/good.tsv /opt/imagelab/download-models.sh; echo "exit $?"
     echo "## run 2"; MANIFEST=/tmp/good.tsv /opt/imagelab/download-models.sh; echo "exit $?"
     echo "## bad";   MANIFEST=/tmp/bad.tsv /opt/imagelab/download-models.sh; echo "exit $?"
-    echo "## files"; sha256sum /tmp/models/t197/a/config.json; cat /tmp/models/t197/b/BiRefNet_config.py; ls -la /tmp/models/t197/c/ 2>&1'
+    echo "## files"; sha256sum /tmp/models/t197/a/config.json; cat /tmp/models/t197/b/BiRefNet_config.py; ls -la /tmp/models/t197/c/ 2>&1
+    echo "## status"; cat /tmp/logs/startup-downloads.tsv'
 check "the missing file was added" has "added   t197/a/config.json"
 check "its sha256 matches the manifest" has "966a1f0165b072d2d1309756e71907750e535ba5c3790d8cd0e69713ff3a56cd  /tmp/models/t197/a/config.json"
 check "the existing file was kept, not overwritten" has "kept    t197/b/BiRefNet_config.py (5 bytes, manifest says 298; add-only, not touched)"
@@ -123,6 +126,11 @@ check "run 2: everything present" has "everything present"
 check "wrong hash refused" has "sha256 mismatch for t197/c/config.json"
 check "wrong hash: the run fails (start.sh retries)" has "exit 1"
 check "no .part left in the bad folder" [ "$(grep -A3 '## files' <<< "$out" | grep -c 'config.json')" = 1 ]
+TAB=$'\t'
+check "status file: one run line, first" [ "$(grep -A1 '## status' <<< "$out" | tail -1)" = "run${TAB}197" ]
+check "status file: the missing file queued, then done (aria2's hook)" has "done${TAB}t197/a${TAB}config.json${TAB}402${TAB}/tmp/models/t197/a/config.json"
+check "status file: the kept file is no row" lacks "${TAB}t197/b${TAB}"
+check "status file: the wrong hash ends failed" has "failed${TAB}t197/c${TAB}config.json${TAB}402${TAB}/tmp/models/t197/c/config.json${TAB}downloaded, but the size or sha256 did not match"
 
 # ---- 4. CPU priority: ComfyUI below the agent (#202) ------------------------------------------------------------
 # A real boot on the CPU without network: both ComfyUIs (COMFY_VIDEO=1) and the agent (a fake token, hub at a closed

@@ -178,6 +178,7 @@ direct `ip:port` answers 200 means that and nothing else.
 | `/pod/logs/agent.log` | the agent (gpu-agent; one for both ComfyUIs and every hub); absent when the pod env has no hub token |
 | `/pod/logs/download.log` | model download progress |
 | `/pod/logs/models-complete` | 200 once every model of the selected packs has landed |
+| `/pod/logs/startup-downloads.tsv` | one line per change of a file being downloaded at boot, which the agent shows in ImageLab's Download queue (see *Model packs*) |
 
 Behind nginx basic auth: user `COMFY_LOCAL_USER` (`imagelab`), password `COMFY_LOCAL_TOKEN`.
 ImageLab calls only ComfyUI and `/imagelab/api/*`, never `/pod/app`, so the pod routes can change
@@ -208,6 +209,17 @@ test pod: a few rows copied out of a pack). `HF_TOKEN` is sent to huggingface.co
 gated `flux-2-klein-9b-fp8.safetensors` (an account that accepted the FLUX non-commercial licence); without
 it that one row fails and `models-complete` never appears, the rest still lands. `scripts/container-test.sh`
 is the test of all this (CI runs it on every image).
+
+**In ImageLab's Download queue** (gpu-agent 0.1.5, imagelab-server protocol 0.59.0): `start.sh` runs the download with
+`DOWNLOAD_STATUS=/workspace/imagelab-logs/startup-downloads.tsv` (deleted at boot). `download-models.sh` appends a
+`run <id>` line once, then `queued` / `done` / `failed <why>` per file (`<folder> <name> <bytes> <path>`, tab
+separated). Each file is checked and renamed as soon as aria2 has it (the script is aria2's `--on-download-complete`
+hook), not after the whole batch. The agent (`startupDownloads` in `gpu-agent.yaml`) reads the file every 2 s, takes
+the progress of a running file from its `.part` on disk, and sends each file to the lab hub as `download.progress`
+with `source: "startup"`: the ↓ pill shows it with the pod's worker name, percent, speed and done / failed, like an
+install. No cancel or retry for these rows (start.sh retries by itself); a finished one can be dismissed. The agent
+can connect after the downloads began: it reads the whole file. `scripts/download-status-test.sh` is the local test
+(fake aria2c, local http server, no network).
 
 ## The second ComfyUI (video)
 
@@ -312,6 +324,7 @@ route and no repointing after a resume. Each ComfyUI `start.sh` launched is an e
 | `inputDir` / `outputDir` | `/workspace/ComfyUI/input` / `/workspace/ComfyUI/output` (a job's inputs and the files its save nodes wrote are deleted after the job, gpu-agent #187) | the same folders |
 | control | `attach`, `pod: true`, `imageManaged: true` (update / install-node refused; restart = ComfyUI-Manager's soft reboot) | the same |
 | `modelsMarker` | `/workspace/imagelab-logs/models-complete` (gpu-agent 0.1.4, Server #202) | the same |
+| `startupDownloads` | `/workspace/imagelab-logs/startup-downloads.tsv` (gpu-agent 0.1.5; the first instance's is read) | the same |
 
 `agent.sh` writes all this to `/etc/gpu-agent/gpu-agent.yaml` at every boot. **Tokens never go into
 the file**: it says `token: env:GPU_AGENT_TOKEN_LAB` and the agent reads the variable, so the file can

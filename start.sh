@@ -136,14 +136,17 @@ echo "[start] nginx listening on 0.0.0.0:$PROXY_PORT (basic auth user '$COMFY_AU
 # Which files: MODEL_PACKS=image,video,3d (default image; packs/*.tsv) or MANIFEST=<file> (download-models.sh).
 # Add-only with a sha256 check; HF_TOKEN for the gated file of the 3d pack; models-complete once all landed.
 # The agent watches models-complete (agent.sh's `modelsMarker`) and re-advertises the models at once (#202).
+# startup-downloads.tsv: one line per file change, which the agent (`startupDownloads`, gpu-agent 0.1.5) shows in
+# ImageLab's Download queue; new at every boot, shared by the attempts of this one.
 LOG_DIR=/workspace/imagelab-logs
 mkdir -p "$LOG_DIR"
 rm -f "$LOG_DIR/models-complete"   # stale marker from a previous boot must not report completion
+rm -f "$LOG_DIR/startup-downloads.tsv"
 if [ "${SKIP_MODEL_DOWNLOAD:-0}" != 1 ]; then
   (
     for attempt in $(seq 1 "${DOWNLOAD_ATTEMPTS:-20}"); do
       echo "[models] ===== attempt $attempt $(date -u +%FT%TZ) ====="
-      if /opt/imagelab/download-models.sh; then
+      if DOWNLOAD_STATUS="$LOG_DIR/startup-downloads.tsv" /opt/imagelab/download-models.sh; then
         echo "[models] ===== complete $(date -u +%FT%TZ) ====="
         touch "$LOG_DIR/models-complete"
         exit 0
