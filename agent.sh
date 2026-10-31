@@ -61,7 +61,8 @@ fi
 # model download is complete, and the agent re-checks its model list at once, then every 3 s until ImageLabCore has
 # indexed and hashed every file (gpu-agent 0.1.4, Server #202; besides its own 60 s check). startupDownloads: the
 # status file download-models.sh appends to (start.sh), which the agent shows in ImageLab's Download queue (gpu-agent
-# 0.1.5; an older agent ignores the key). control attach + pod: image-managed (the hub's update / install-node are
+# 0.1.5; an older agent ignores the key); startupDownloadsRpc: aria2's RPC file (address + secret, mode 600) the script
+# writes while aria2 runs, for each file's real progress (gpu-agent 0.1.6). control attach + pod: image-managed (the hub's update / install-node are
 # refused; restart is ComfyUI-Manager's soft reboot).
 engine() {  # engine <id> <gpu> <port>
   cat <<EOF
@@ -73,6 +74,7 @@ engine() {  # engine <id> <gpu> <port>
     outputDir: $OUTPUT_DIR
     modelsMarker: $LOG_DIR/models-complete
     startupDownloads: $LOG_DIR/startup-downloads.tsv
+    startupDownloadsRpc: /run/imagelab/aria2-rpc.json
     control: { mode: attach, pod: true, imageManaged: true }
 EOF
 }

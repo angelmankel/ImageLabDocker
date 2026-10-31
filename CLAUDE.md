@@ -215,11 +215,25 @@ is the test of all this (CI runs it on every image).
 `run <id>` line once, then `queued` / `done` / `failed <why>` per file (`<folder> <name> <bytes> <path>`, tab
 separated). Each file is checked and renamed as soon as aria2 has it (the script is aria2's `--on-download-complete`
 hook), not after the whole batch. The agent (`startupDownloads` in `gpu-agent.yaml`) reads the file every 2 s, takes
-the progress of a running file from its `.part` on disk, and sends each file to the lab hub as `download.progress`
+the progress of a running file from aria2 (below), and sends each file to the lab hub as `download.progress`
 with `source: "startup"`: the ↓ pill shows it with the pod's worker name, percent, speed and done / failed, like an
 install. No cancel or retry for these rows (start.sh retries by itself); a finished one can be dismissed. The agent
 can connect after the downloads began: it reads the whole file. `scripts/download-status-test.sh` is the local test
 (fake aria2c, local http server, no network).
+
+**How progress is read** (gpu-agent 0.1.6): from aria2 itself, never from the `.part` on disk. aria2 writes 8 segments
+spread over the file, so the part's size is about the total at once, and its allocated blocks overshoot on the pod's
+volume and shrink back: gpu-agent 0.1.5 used those and showed every running file at 98-99% for minutes. Now `start.sh`
+also passes `DOWNLOAD_RPC_FILE=/run/imagelab/aria2-rpc.json` (outside the nginx-served logs; removed at boot):
+`download-models.sh` starts aria2c with its JSON-RPC on `127.0.0.1:${ARIA2_RPC_PORT:-6801}` only and a random secret
+(in a mode-600 `--conf-path` file, not on the command line) and writes `{"url","secret"}` there (mode 600) while aria2
+runs. The agent (`startupDownloadsRpc` in `gpu-agent.yaml`) asks aria2 every 2 s for each file's completedLength
+(by its `.part` path). Without RPC (port taken, aria2 ended, curl fallback) it reads aria2's control file
+`<path>.part.aria2` (saved every 10 s: `--auto-save-interval=10`), else the part's size (curl is one stream); within
+one attempt a file's bytes never go back, and the curl fallback writes a new `queued` line as it starts from zero.
+With RPC aria2 does not exit after its input file, so the script polls `aria2.getGlobalStat` and calls
+`aria2.shutdown` once nothing is active or waiting (`--stop-with-process` ends it should the script die); the checks,
+curl fallback, status lines and exit codes are as before. Speed is still the web's (the protocol has no speed field).
 
 ## The second ComfyUI (video)
 
@@ -325,6 +339,7 @@ route and no repointing after a resume. Each ComfyUI `start.sh` launched is an e
 | control | `attach`, `pod: true`, `imageManaged: true` (update / install-node refused; restart = ComfyUI-Manager's soft reboot) | the same |
 | `modelsMarker` | `/workspace/imagelab-logs/models-complete` (gpu-agent 0.1.4, Server #202) | the same |
 | `startupDownloads` | `/workspace/imagelab-logs/startup-downloads.tsv` (gpu-agent 0.1.5; the first instance's is read) | the same |
+| `startupDownloadsRpc` | `/run/imagelab/aria2-rpc.json` (gpu-agent 0.1.6: aria2's RPC address + secret while it runs) | the same |
 
 `agent.sh` writes all this to `/etc/gpu-agent/gpu-agent.yaml` at every boot. **Tokens never go into
 the file**: it says `token: env:GPU_AGENT_TOKEN_LAB` and the agent reads the variable, so the file can

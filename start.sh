@@ -137,16 +137,18 @@ echo "[start] nginx listening on 0.0.0.0:$PROXY_PORT (basic auth user '$COMFY_AU
 # Add-only with a sha256 check; HF_TOKEN for the gated file of the 3d pack; models-complete once all landed.
 # The agent watches models-complete (agent.sh's `modelsMarker`) and re-advertises the models at once (#202).
 # startup-downloads.tsv: one line per file change, which the agent (`startupDownloads`, gpu-agent 0.1.5) shows in
-# ImageLab's Download queue; new at every boot, shared by the attempts of this one.
+# ImageLab's Download queue; new at every boot, shared by the attempts of this one. aria2-rpc.json: while aria2 runs,
+# its loopback RPC address + secret (mode 600, not under the served logs), which the agent (`startupDownloadsRpc`,
+# gpu-agent 0.1.6) asks for each file's real progress.
 LOG_DIR=/workspace/imagelab-logs
 mkdir -p "$LOG_DIR"
 rm -f "$LOG_DIR/models-complete"   # stale marker from a previous boot must not report completion
-rm -f "$LOG_DIR/startup-downloads.tsv"
+rm -f "$LOG_DIR/startup-downloads.tsv" /run/imagelab/aria2-rpc.json
 if [ "${SKIP_MODEL_DOWNLOAD:-0}" != 1 ]; then
   (
     for attempt in $(seq 1 "${DOWNLOAD_ATTEMPTS:-20}"); do
       echo "[models] ===== attempt $attempt $(date -u +%FT%TZ) ====="
-      if DOWNLOAD_STATUS="$LOG_DIR/startup-downloads.tsv" /opt/imagelab/download-models.sh; then
+      if DOWNLOAD_STATUS="$LOG_DIR/startup-downloads.tsv" DOWNLOAD_RPC_FILE=/run/imagelab/aria2-rpc.json /opt/imagelab/download-models.sh; then
         echo "[models] ===== complete $(date -u +%FT%TZ) ====="
         touch "$LOG_DIR/models-complete"
         exit 0

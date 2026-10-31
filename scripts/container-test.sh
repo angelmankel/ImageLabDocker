@@ -9,6 +9,8 @@
 #   3. download-models.sh: MODEL_PACKS picks the manifests (3d = 11 files), a tiny manifest downloads with a sha256 check,
 #      a wrong hash is refused, an existing file is never overwritten; DOWNLOAD_STATUS gets the lines the agent shows in
 #      ImageLab's Download queue (real aria2 and its completion hook; scripts/download-status-test.sh is the local test);
+#      with DOWNLOAD_RPC_FILE aria2's loopback RPC answers mid-download with a file's real completedLength (a slow
+#      local server), the RPC file is mode 600 while aria2 runs and gone after, and the script still ends by itself;
 #   4. start.sh (a CPU boot, no network): both ComfyUIs run at nice 10, the agent at 0 (Server #202, gpu-agent DESIGN §8.2).
 #
 # DOCKER_RUN_ARGS adds `docker run` options, e.g. bind mounts to try this repo's scripts on an older image before CI:
@@ -62,6 +64,7 @@ check "inputDir / outputDir (#187)" has "inputDir: /workspace/ComfyUI/input"
 check "control attach on a pod" has "control: { mode: attach, pod: true, imageManaged: true }"
 check "modelsMarker = the models-complete file start.sh touches (#202)" [ "$(grep -c 'modelsMarker: /workspace/imagelab-logs/models-complete' <<< "$out")" = 2 ]
 check "startupDownloads = the status file download-models.sh appends to (gpu-agent 0.1.5)" [ "$(grep -c 'startupDownloads: /workspace/imagelab-logs/startup-downloads.tsv' <<< "$out")" = 2 ]
+check "startupDownloadsRpc = aria2's RPC file start.sh passes to download-models.sh (gpu-agent 0.1.6)" [ "$(grep -c 'startupDownloadsRpc: /run/imagelab/aria2-rpc.json' <<< "$out")" = 2 ]
 check "costPerHour from WORKER_COST_PER_HOUR" has "costPerHour: 1.5"
 check "no token value in the output" lacks "$T_LAB"
 check "no token value in the output (dev)" lacks "$T_DEV"
@@ -131,6 +134,69 @@ check "status file: one run line, first" [ "$(grep -A1 '## status' <<< "$out" | 
 check "status file: the missing file queued, then done (aria2's hook)" has "done${TAB}t197/a${TAB}config.json${TAB}402${TAB}/tmp/models/t197/a/config.json"
 check "status file: the kept file is no row" lacks "${TAB}t197/b${TAB}"
 check "status file: the wrong hash ends failed" has "failed${TAB}t197/c${TAB}config.json${TAB}402${TAB}/tmp/models/t197/c/config.json${TAB}downloaded, but the size or sha256 did not match"
+
+# aria2's RPC for the agent's progress (gpu-agent 0.1.6), with the real aria2c: a local server sends a 24 MiB file
+# slowly (ranges, ~6 MiB/s), and while it runs the RPC file's address + secret must answer with that file's
+# completedLength below its totalLength. Then the script must end by itself (it shuts aria2 down) and check the file.
+SLOW='import http.server, os, sys, time
+data = bytes(range(256)) * (24 * 4096)
+class H(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_HEAD(self): self.send(False)
+    def do_GET(self): self.send(True)
+    def send(self, body):
+        a, b = 0, len(data) - 1
+        r = self.headers.get("Range")
+        if r:
+            lo, hi = r.split("=", 1)[1].split("-")
+            a = int(lo); b = int(hi) if hi else b
+            self.send_response(206); self.send_header("Content-Range", "bytes %d-%d/%d" % (a, b, len(data)))
+        else: self.send_response(200)
+        self.send_header("Accept-Ranges", "bytes"); self.send_header("Content-Length", str(b - a + 1)); self.end_headers()
+        if not body: return
+        try:
+            for o in range(a, b + 1, 65536):
+                self.wfile.write(data[o:min(o + 65536, b + 1)]); time.sleep(0.03)
+        except (BrokenPipeError, ConnectionResetError): pass
+http.server.ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()'
+run "download-models.sh: aria2's RPC answers mid-download with the real bytes; the script still ends by itself" \
+  -e SLOW="$SLOW" -e MODELS_DIR=/tmp/models -e DOWNLOAD_STATUS=/tmp/logs/startup-downloads.tsv -e DOWNLOAD_RPC_FILE=/run/imagelab/aria2-rpc.json \
+  -e DOWNLOAD_RUN=6 -e ARIA2_RPC_PORT=16801 -- '
+    printf "%s\n" "$SLOW" > /tmp/slow.py; python3 /tmp/slow.py 18089 & sleep 1
+    sha=$(python3 -c "import hashlib; print(hashlib.sha256(bytes(range(256)) * (24 * 4096)).hexdigest())")
+    printf "url\tfolder\tname\tbytes\tsha256\nhttp://127.0.0.1:18089/big.bin\trpc\tbig.safetensors\t25165824\t%s\n" "$sha" > /tmp/rpc.tsv
+    start=$(date +%s)
+    MANIFEST=/tmp/rpc.tsv timeout 300 /opt/imagelab/download-models.sh > /tmp/dl.log 2>&1 & dl=$!
+    for _ in $(seq 1 100); do [ -s /run/imagelab/aria2-rpc.json ] && break; sleep 0.1; done
+    echo "rpc file $(stat -c %a /run/imagelab/aria2-rpc.json 2>&1)"
+    url=$(sed -n "s/.*\"url\":\"\([^\"]*\)\".*/\1/p" /run/imagelab/aria2-rpc.json)
+    secret=$(sed -n "s/.*\"secret\":\"\([^\"]*\)\".*/\1/p" /run/imagelab/aria2-rpc.json)
+    for _ in $(seq 1 40); do
+      sleep 0.5
+      ans=$(printf "{\"jsonrpc\":\"2.0\",\"id\":\"t\",\"method\":\"aria2.tellActive\",\"params\":[\"token:%s\",[\"completedLength\",\"totalLength\",\"files\"]]}" "$secret" | curl -s -m 3 --data-binary @- "$url")
+      line=$(python3 -c "import json, sys
+d = json.load(sys.stdin).get(\"result\") or []
+for x in d: print(x[\"completedLength\"], x[\"totalLength\"], x[\"files\"][0][\"path\"])" <<< "$ans" 2>/dev/null | head -1)
+      read -r c t p <<< "$line"
+      if [ -n "$c" ] && [ "$c" -gt 0 ] && [ "$t" = 25165824 ] && [ "$c" -lt "$t" ]; then
+        echo "mid-download rpc completed=$c total=$t path=$p"; break
+      fi
+    done
+    wrong=$(printf "{\"jsonrpc\":\"2.0\",\"id\":\"t\",\"method\":\"aria2.tellActive\",\"params\":[\"token:nope\"]}" | curl -s -m 3 --data-binary @- "$url")
+    grep -q "Unauthorized" <<< "$wrong" && echo "wrong secret refused"
+    wait $dl; echo "script exit $? after $(( $(date +%s) - start ))s"
+    test -e /run/imagelab/aria2-rpc.json && echo RPC_FILE_LEFT || echo "rpc file gone"
+    for d in /proc/[0-9]*; do tr "\0" " " < "$d/cmdline" 2>/dev/null | grep -q "^aria2c " && echo ARIA2_LEFT; done
+    grep -E "added|aria2c reported|verified|taken|FAILED|!!" /tmp/dl.log; tail -1 /tmp/logs/startup-downloads.tsv'
+check "the RPC file is mode 600 while aria2 runs" has "rpc file 600"
+check "aria2's RPC answered mid-download with the real bytes, by the .part path" grep -qE "^mid-download rpc completed=[0-9]+ total=25165824 path=/tmp/models/rpc/big.safetensors.part$" <<< "$out"
+check "a wrong secret is refused" has "wrong secret refused"
+check "the script ended by itself, exit 0 (aria2 shut down over RPC)" has "script exit 0"
+check "the RPC file is gone after the run" has "rpc file gone"
+check "no aria2c left running" lacks "ARIA2_LEFT"
+check "the file landed and was checked" has "added   rpc/big.safetensors"
+check "status file: done" has "done${TAB}rpc${TAB}big.safetensors${TAB}25165824${TAB}/tmp/models/rpc/big.safetensors"
+check "no aria2 failure reported" lacks "aria2c reported failures"
 
 # ---- 4. CPU priority: ComfyUI below the agent (#202) ------------------------------------------------------------
 # A real boot on the CPU without network: both ComfyUIs (COMFY_VIDEO=1) and the agent (a fake token, hub at a closed

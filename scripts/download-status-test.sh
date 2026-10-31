@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Local test of download-models.sh's status file (DOWNLOAD_STATUS, read by gpu-agent 0.1.5 for ImageLab's Download
-# queue) and its aria2 completion hook. No network, no docker, no real models folder: a throwaway folder, a python
-# http.server on 127.0.0.1 serving a few tiny files, and a fake aria2c (curl + the --on-download-complete hook, run
-# asynchronously like aria2's). The real aria2c is covered by scripts/container-test.sh in CI.
+# queue), its aria2 completion hook and aria2's RPC for the agent's progress (DOWNLOAD_RPC_FILE, gpu-agent 0.1.6).
+# No network, no docker, no real models folder: a throwaway folder, a python http.server on 127.0.0.1 serving a few
+# tiny files, and a fake aria2c (curl + the --on-download-complete hook, run asynchronously like aria2's; with
+# enable-rpc in its --conf-path it then stays up, like aria2, answering the RPC until aria2.shutdown). The real
+# aria2c is covered by scripts/container-test.sh in CI.
 #
 #   scripts/download-status-test.sh
 set -euo pipefail
@@ -29,16 +31,16 @@ U="http://127.0.0.1:$port"
 # ---- a fake aria2c: input file entries (url, then "  dir=", "  out="), curl each, then the hook like aria2 ----------
 cat > "$T/bin/aria2c" <<'FAKE'
 #!/usr/bin/env bash
-input= hook= rc=0
-for a in "$@"; do case "$a" in --input-file=*) input=${a#*=} ;; --on-download-complete=*) hook=${a#*=} ;; esac; done
+input= hook= rc=0 conf= results=
+for a in "$@"; do case "$a" in --input-file=*) input=${a#*=} ;; --on-download-complete=*) hook=${a#*=} ;; --conf-path=*) conf=${a#*=} ;; esac; done
 url= dir= out=
 fetch() {
   [ -n "$url" ] || return 0
   mkdir -p "$dir"; : > "$dir/$out.aria2"
   if curl -fsS -o "$dir/$out" "$url" 2>/dev/null; then
-    rm -f "$dir/$out.aria2"
+    rm -f "$dir/$out.aria2"; results+=complete,
     [ -z "$hook" ] || "$hook" "gid$RANDOM" 1 "$dir/$out" &   # aria2 does not wait for its hooks
-  else rm -f "$dir/$out" "$dir/$out.aria2"; rc=1; fi
+  else rm -f "$dir/$out" "$dir/$out.aria2"; rc=1; results+=error,; fi
   url= dir= out=
 }
 while IFS= read -r line; do
@@ -52,9 +54,41 @@ done < "$input"
 fetch
 sleep 1                                              # the hooks run while aria2 is still busy
 cp "$DOWNLOAD_STATUS" "$FAKE_SNAPSHOT" 2>/dev/null || true
+if [ -n "$conf" ] && grep -qx 'enable-rpc=true' "$conf"; then
+  # aria2 with RPC does not exit after its input file: answer until aria2.shutdown (the script must send it)
+  [ -n "${FAKE_RPC_SEEN:-}" ] && { cat "$DOWNLOAD_RPC_FILE"; stat -c 'mode %a' "$DOWNLOAD_RPC_FILE"; } > "$FAKE_RPC_SEEN" 2>&1
+  exec python3 "$(dirname "$0")/fake-rpc.py" "$conf" "$results" "$FAKE_RPC_LOG"
+fi
 exit $rc
 FAKE
 chmod +x "$T/bin/aria2c"
+cat > "$T/bin/fake-rpc.py" <<'RPC'
+import json, sys, threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+conf = dict(l.strip().split("=", 1) for l in open(sys.argv[1]) if "=" in l)
+statuses = [r for r in sys.argv[2].split(",") if r]
+log = open(sys.argv[3], "a")
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_POST(self):
+        req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        ok = req["params"][0] == "token:" + conf["rpc-secret"]
+        log.write(f"{req['method']} token={'ok' if ok else 'BAD'}\n"); log.flush()
+        if not ok: res = {"error": {"code": 1, "message": "Unauthorized"}}
+        elif req["method"] == "aria2.getGlobalStat": res = {"result": {"numActive": "0", "numWaiting": "0", "numStopped": str(len(statuses)), "numStoppedTotal": str(len(statuses))}}
+        elif req["method"] == "aria2.tellStopped": res = {"result": [{"status": s} for s in statuses]}
+        else: res = {"result": "OK"}
+        body = json.dumps({"id": req["id"], "jsonrpc": "2.0", **res}, separators=(",", ":")).encode()  # compact, as aria2
+        self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+        if ok and req["method"] == "aria2.shutdown": threading.Thread(target=srv.shutdown).start()
+srv = HTTPServer(("127.0.0.1", int(conf["rpc-listen-port"])), H)
+timer = threading.Timer(30, lambda: (log.write("TIMEOUT no shutdown\n"), log.flush(), srv.shutdown()))
+timer.daemon = True
+timer.start()
+srv.serve_forever()
+timer.cancel()
+sys.exit(1 if "error" in statuses else 0)
+RPC
 
 manifest="$T/manifest.tsv"
 {
@@ -66,9 +100,12 @@ manifest="$T/manifest.tsv"
 } > "$manifest"
 mkdir -p "$T/models/upscale_models" && echo mine > "$T/models/upscale_models/kept.pth"
 status="$T/logs/startup-downloads.tsv"
+rpcfile="$T/run/imagelab/aria2-rpc.json"
+rpcport=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
 run() {
   PATH="$T/bin:$PATH" MANIFEST="$manifest" MODELS_DIR="$T/models" DOWNLOAD_STATUS="$status" DOWNLOAD_RUN="${1:-}" \
-    FAKE_SNAPSHOT="$T/at-aria2-exit.tsv" bash "$here/download-models.sh" > "$T/out.log" 2>&1
+    DOWNLOAD_RPC_FILE="$rpcfile" ARIA2_RPC_PORT="$rpcport" FAKE_RPC_SEEN="$T/rpc-seen.txt" FAKE_RPC_LOG="$T/rpc.log" \
+    FAKE_SNAPSHOT="$T/at-aria2-exit.tsv" timeout 120 bash "$here/download-models.sh" > "$T/out.log" 2>&1
 }
 row() { printf '%s\t%s\t%s\t%s\t%s' "$1" "$2" "$3" "$4" "$T/models/$2/$3"; }
 
@@ -76,7 +113,7 @@ set +e; run 777; code=$?; set -e
 sed 's/^/    /' "$T/out.log"
 echo "--- status file"; sed 's/^/    /' "$status"
 A=$(size "$T/www/a.bin"); B=$(size "$T/www/b.bin")
-check "the run fails (two files missing), as before" [ "$code" = 1 ]
+check "the run fails (two files missing), as before (and ends: not the timeout)" [ "$code" = 1 ]
 check "first line: run 777" [ "$(head -1 "$status")" = "$(printf 'run\t777')" ]
 check "a queued" grep -qxF "$(row queued checkpoints a.safetensors "$A")" "$status"
 check "b queued" grep -qxF "$(row queued loras b.safetensors "$B")" "$status"
@@ -88,6 +125,15 @@ check "a in place with its content" cmp -s "$T/www/a.bin" "$T/models/checkpoints
 check "b failed: the curl copy did not check out" grep -qxF "$(row failed loras b.safetensors "$B")	downloaded, but the size or sha256 did not match" "$status"
 check "b never got its name" [ ! -e "$T/models/loras/b.safetensors" ]
 check "c failed: http 404" grep -qxF "$(row failed vae c.safetensors 123)	http 404" "$status"
+check "the curl fallback queued b and c again (a new attempt: curl starts from zero)" \
+  [ "$(grep -c "^queued	loras	b.safetensors" "$status")" = 2 -a "$(grep -c "^queued	vae	c.safetensors" "$status")" = 2 ]
+check "aria2's failures were noticed over RPC (curl fallback)" grep -qF "aria2c reported failures" "$T/out.log"
+echo "--- rpc"; sed 's/^/    /' "$T/rpc.log"
+check "the RPC file existed while aria2 ran: loopback URL, mode 600" \
+  bash -c "grep -q '^{\"url\":\"http://127.0.0.1:$rpcport/jsonrpc\",\"secret\":\"[0-9a-f]\{48\}\"}\$' '$T/rpc-seen.txt' && grep -qx 'mode 600' '$T/rpc-seen.txt'"
+check "the script asked aria2 with the secret and shut it down" bash -c "grep -qx 'aria2.shutdown token=ok' '$T/rpc.log' && ! grep -q 'BAD\|TIMEOUT' '$T/rpc.log'"
+check "the RPC file is gone after the run" [ ! -e "$rpcfile" ]
+check "the secret is not on aria2's command line" bash -c "! grep -q 'rpc-secret' '$T/out.log'"
 check "no part left" [ -z "$(find "$T/models" -name '*.part*')" ]
 check "the kept file untouched" [ "$(cat "$T/models/upscale_models/kept.pth")" = mine ]
 
@@ -95,7 +141,16 @@ check "the kept file untouched" [ "$(cat "$T/models/upscale_models/kept.pth")" =
 lines=$(wc -l < "$status")
 set +e; run 888; set -e
 check "second attempt: no new run line" [ "$(grep -c '^run' "$status")" = 1 ]
-check "second attempt: b and c queued again, a not" bash -c "tail -n +$((lines+1)) '$status' | cut -f1,3 | grep -c '^queued' | grep -qx 2 && ! tail -n +$((lines+1)) '$status' | grep -qF a.safetensors"
+check "second attempt: b and c queued again, a not" bash -c "tail -n +$((lines+1)) '$status' | grep '^queued' | cut -f3 | sort -u | tr '\n' ' ' | grep -qx 'b.safetensors c.safetensors ' && ! tail -n +$((lines+1)) '$status' | grep -qF a.safetensors"
+
+# The RPC port taken (say by a stray aria2): aria2 runs without RPC, ends by itself, nothing else changes
+python3 -c 'import socket,time; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("127.0.0.1", '"$rpcport"')); s.listen(); time.sleep(60)' &
+blocker=$!
+for _ in $(seq 1 50); do (exec 3<>"/dev/tcp/127.0.0.1/$rpcport") 2>/dev/null && break; sleep 0.1; done
+: > "$T/rpc.log"
+set +e; run 999; code=$?; set -e
+kill "$blocker" 2>/dev/null || true
+check "port taken: said so, no RPC, the run ends as before" bash -c "grep -qF 'port $rpcport is taken' '$T/out.log' && [ '$code' = 1 ] && [ ! -s '$T/rpc.log' ] && [ ! -e '$rpcfile' ]"
 
 # Without DOWNLOAD_STATUS nothing is written; a dry run writes nothing either
 rm -rf "$T/models/loras" "$T/logs"

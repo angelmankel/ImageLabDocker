@@ -25,11 +25,19 @@
 # deleted at boot) every change of a file to fetch is appended there as one tab-separated line, which the agent reads
 # (`startupDownloads` in gpu-agent.yaml) and sends to the hubs as download.progress:
 #   run <id>                                       once, when the file is new: every attempt of one boot shares it
-#   queued <folder> <name> <bytes> <path>          to be fetched; the agent reads the progress from <path>.part
+#   queued <folder> <name> <bytes> <path>          to be fetched (again: each queued line starts an attempt; the curl
+#                                                  fallback writes one too, as it fetches the file again from zero)
 #   done   <folder> <name> <bytes> <path>          checked and in place under its name
 #   failed <folder> <name> <bytes> <path> <why>    not fetched by this attempt (start.sh tries again)
 # Each file is checked as soon as aria2 has it (aria2 runs this script as its --on-download-complete hook), so it
 # lands, and shows done, without waiting for the rest of the batch.
+#
+# Progress (gpu-agent 0.1.6): with DOWNLOAD_RPC_FILE=<file> as well (start.sh: /run/imagelab/aria2-rpc.json, outside
+# the nginx-served logs) aria2c runs with its JSON-RPC on 127.0.0.1:${ARIA2_RPC_PORT:-6801} only and a random secret,
+# and the script writes {"url","secret"} to that file (mode 600) while aria2 runs; the agent (`startupDownloadsRpc`)
+# asks aria2 for each file's completedLength. Without it the agent reads aria2's control file (<path>.part.aria2,
+# saved every 10 s), or the .part's size for curl. With RPC aria2 does not exit by itself, so this script calls
+# aria2.shutdown once nothing is active or waiting; the run then goes on (checks, curl fallback) exactly as before.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 MODELS_DIR=${MODELS_DIR:-/workspace/ComfyUI/models}
@@ -37,6 +45,9 @@ PACKS_DIR=${PACKS_DIR:-$here/packs}
 PARALLEL=${DOWNLOAD_PARALLEL:-6}
 STATUS=${DOWNLOAD_STATUS:-}
 [ "${DOWNLOAD_DRY_RUN:-0}" = 1 ] && STATUS=   # the container test's dry run reports nothing
+RPC_FILE=${DOWNLOAD_RPC_FILE:-}
+RPC_PORT=${ARIA2_RPC_PORT:-6801}
+[ -n "$STATUS" ] || RPC_FILE=                 # nobody shows the progress without the status file
 urls=(); folders=(); names=(); sizes=(); shas=()
 
 status() {  # status <state> <i> [why]: one line for the agent (see above); nothing without DOWNLOAD_STATUS
@@ -140,7 +151,7 @@ if [ -n "$STATUS" ] && [ ! -s "$STATUS" ]; then   # before the umask: nginx serv
 fi
 umask 077
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+trap 'rm -rf "$work"; [ -z "$RPC_FILE" ] || rm -f "$RPC_FILE"' EXIT
 input="$work/aria2.input"
 
 real_url() {  # real_url <manifest url>: the URL to fetch (`civitai:<versionId>` carries the API key)
@@ -194,15 +205,56 @@ fi
 # ---- aria2, then the check of each file ------------------------------------------------------------------
 echo "[models] downloading ${#todo[@]} file(s) with aria2c ($PARALLEL concurrent, 8 connections each)"
 export DL_WORK="$work" MODELS_DIR DOWNLOAD_STATUS="$STATUS"   # for the hook below (this script again)
+# RPC for the agent's progress (see the top): loopback only, the secret only in mode-600 files (not on a command line).
+rpc_opts=() secret=
+if [ -n "$RPC_FILE" ]; then
+  if (exec 3<>"/dev/tcp/127.0.0.1/$RPC_PORT") 2>/dev/null; then
+    echo "[models] port $RPC_PORT is taken; aria2 runs without RPC (progress from its control files)" >&2; RPC_FILE=
+  else
+    secret=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    printf 'enable-rpc=true\nrpc-listen-all=false\nrpc-listen-port=%s\nrpc-secret=%s\n' "$RPC_PORT" "$secret" > "$work/aria2.conf"
+    rpc_opts=(--conf-path="$work/aria2.conf" --stop-with-process=$$)
+    mkdir -p "$(dirname "$RPC_FILE")" \
+      && printf '{"url":"http://127.0.0.1:%s/jsonrpc","secret":"%s"}\n' "$RPC_PORT" "$secret" > "$RPC_FILE.tmp" \
+      && mv -f "$RPC_FILE.tmp" "$RPC_FILE" || { rm -f "$RPC_FILE.tmp"; RPC_FILE=; }
+  fi
+fi
+rpc() {  # rpc <method> [<json params after the token>]: aria2's answer on stdout; the secret goes in on stdin
+  printf '{"jsonrpc":"2.0","id":"m","method":"%s","params":["token:%s"%s]}' "$1" "$secret" "${2:+,$2}" |
+    curl -s -m 5 -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$RPC_PORT/jsonrpc"
+}
+num() { sed -n "s/.*\"$1\" *: *\"\([0-9]*\)\".*/\1/p" <<< "$2"; }   # num <key> <json>: one of aria2's number strings
 aria2c --input-file="$input" \
   --on-download-complete="$here/$(basename "$0")" \
   --max-concurrent-downloads="$PARALLEL" \
   --max-connection-per-server=8 --split=8 --min-split-size=8M \
   --continue=true --allow-overwrite=true --auto-file-renaming=false \
-  --file-allocation=none --max-tries=10 --retry-wait=10 --timeout=60 \
+  --file-allocation=none --max-tries=10 --retry-wait=10 --timeout=60 --auto-save-interval=10 \
   --summary-interval=60 --console-log-level=notice --show-console-readout=false \
-  --user-agent="Mozilla/5.0 (imagelab)" \
-  || echo "[models] aria2c reported failures; falling back to curl for whatever is still missing" >&2
+  --user-agent="Mozilla/5.0 (imagelab)" "${rpc_opts[@]}" &
+aria2_pid=$!
+aria2_errors=0
+if [ -n "$secret" ]; then
+  # With RPC aria2 keeps running after its input file: shut it down once nothing is active or waiting. Every input
+  # row is in aria2's queue before its RPC answers, so 0 + 0 means done (also if aria2 skipped a row it could not
+  # use: three idle answers in a row are enough then).
+  idle=0 shut=0
+  while kill -0 "$aria2_pid" 2>/dev/null; do
+    sleep 2
+    st=$(rpc aria2.getGlobalStat) || continue
+    active=$(num numActive "$st"); waiting=$(num numWaiting "$st"); stopped=$(num numStoppedTotal "$st")
+    [ -n "$active" ] && [ -n "$waiting" ] || continue
+    if [ "$active" = 0 ] && [ "$waiting" = 0 ]; then idle=$((idle+1)); else idle=0; continue; fi
+    [ "${stopped:-0}" -gt 0 ] || [ "$idle" -ge 3 ] || continue
+    if [ "$shut" = 0 ]; then aria2_errors=$(rpc aria2.tellStopped '0,1000,["status"]' | grep -o '"status" *: *"error"' | wc -l); shut=1; fi
+    rpc aria2.shutdown > /dev/null             # asked again on the next round should this answer get lost
+  done
+fi
+wait "$aria2_pid"; aria2_rc=$?
+[ -z "$RPC_FILE" ] || rm -f "$RPC_FILE"
+if [ "$aria2_rc" != 0 ] || [ "$aria2_errors" -gt 0 ]; then
+  echo "[models] aria2c reported failures; falling back to curl for whatever is still missing" >&2
+fi
 rm -f "$input"
 left=()
 for i in "${todo[@]}"; do finish_part "$i" || left+=("$i"); done
@@ -214,6 +266,7 @@ if [ ${#left[@]} -gt 0 ]; then
   for i in "${left[@]}"; do
     path="$MODELS_DIR/${folders[$i]}/${names[$i]}"
     rm -f "$path.part" "$path.part.aria2"
+    status queued "$i"                         # a new attempt for the agent: curl starts this file from zero
     (
       hdr=(); h=$(hf_header "${urls[$i]}"); [ -z "$h" ] || hdr=(-H "$h")
       code=$(curl -sS -L --retry 3 --retry-delay 5 --max-time 3600 -A "Mozilla/5.0 (imagelab)" "${hdr[@]}" \
