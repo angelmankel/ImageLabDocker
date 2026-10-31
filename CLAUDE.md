@@ -185,8 +185,22 @@ ImageLab calls only ComfyUI and `/imagelab/api/*`, never `/pod/app`, so the pod 
 without an ImageLab build. Models are installed from ImageLab's model browser, which goes through
 `/imagelab/api/downloads`.
 
-First boot fetches the packs `MODEL_PACKS` names (below). Civitai answers 403 to some aria2
-requests — normal, the curl fallback picks them up. Watch `models-complete`.
+First boot fetches the packs `MODEL_PACKS` names (below). Watch `models-complete`.
+
+**The pod needs `CIVITAI_API_KEY`.** Without it CivitAI redirects every model that needs an account to its login
+page (`/login?...&reason=download-auth`): aria2 then fails with a 403 from auth.civitai.com, and curl (which follows
+the redirect) gets a ~9.8 KB HTML page. Pod gw-lab-261031-2unz (2026-10-31, pod manager, no `CIVITAI_API_KEY` in its
+env) lost 18 of the 22 `civitai:` rows of image+video this way on every attempt: "size mismatch (9787 != ...)".
+Since then the curl fallback says so instead of "size or sha256 did not match": the status line reads `CivitAI wants
+a login and CIVITAI_API_KEY is not set on the pod` (or `... was not accepted for this model` with a key).
+
+**The curl fallback** (files aria2 could not fetch): at most `DOWNLOAD_CURL_PARALLEL` (3) at once, up to
+`DOWNLOAD_CURL_TRIES` (3) tries per file that resume (`-C -`) what the last one got; curl's exit code counts (`-f`,
+no `|| true`), a transfer under 100 KB/s for 2 min is cut (no `--max-time`), and a stalled or dropped file keeps its
+part for the next attempt (aria2 resumes a part without a control file). Not retried: a login page, an HTML page,
+http 4xx (except 408/425/429), a wrong sha256. Each failure's status line says why: `http <code>`, `stalled`, `the
+connection dropped`, `could not connect`, `got an HTML page`, `the size / the sha256 did not match the manifest`.
+`CIVITAI_DOWNLOAD_URL` replaces `https://civitai.com/api/download/models` (the local test's fake CivitAI).
 
 ## Model packs
 
@@ -230,7 +244,7 @@ also passes `DOWNLOAD_RPC_FILE=/run/imagelab/aria2-rpc.json` (outside the nginx-
 runs. The agent (`startupDownloadsRpc` in `gpu-agent.yaml`) asks aria2 every 2 s for each file's completedLength
 (by its `.part` path). Without RPC (port taken, aria2 ended, curl fallback) it reads aria2's control file
 `<path>.part.aria2` (saved every 10 s: `--auto-save-interval=10`), else the part's size (curl is one stream); within
-one attempt a file's bytes never go back, and the curl fallback writes a new `queued` line as it starts from zero.
+one attempt a file's bytes never go back, and the curl fallback writes a new `queued` line as it starts the file.
 With RPC aria2 does not exit after its input file, so the script polls `aria2.getGlobalStat` and calls
 `aria2.shutdown` once nothing is active or waiting (`--stop-with-process` ends it should the script die); the checks,
 curl fallback, status lines and exit codes are as before. Speed is still the web's (the protocol has no speed field).

@@ -26,7 +26,7 @@
 # (`startupDownloads` in gpu-agent.yaml) and sends to the hubs as download.progress:
 #   run <id>                                       once, when the file is new: every attempt of one boot shares it
 #   queued <folder> <name> <bytes> <path>          to be fetched (again: each queued line starts an attempt; the curl
-#                                                  fallback writes one too, as it fetches the file again from zero)
+#                                                  fallback writes one too, as it starts the file over or resumes its own part)
 #   done   <folder> <name> <bytes> <path>          checked and in place under its name
 #   failed <folder> <name> <bytes> <path> <why>    not fetched by this attempt (start.sh tries again)
 # Each file is checked as soon as aria2 has it (aria2 runs this script as its --on-download-complete hook), so it
@@ -58,7 +58,8 @@ status() {  # status <state> <i> [why]: one line for the agent (see above); noth
     "${why:+$(printf '\t%s' "$why")}" >> "$STATUS" 2>/dev/null || true
 }
 
-# finish_part <i>: the downloaded <name>.part becomes <name> if its bytes and sha256 are right. 0 = the file is in place.
+# finish_part <i>: the downloaded <name>.part becomes <name> if its bytes and sha256 are right. 0 = the file is in place,
+# 1 = no part to check (or aria2 still holds it), 2 = wrong size, 3 = wrong sha256 (the part is removed for 2 and 3).
 # One check per file at a time: aria2's completion hook and the run's own pass after aria2 may meet on the same file.
 finish_part() {
   if [ -n "${DL_WORK:-}" ] && [ -d "$DL_WORK" ] && command -v flock >/dev/null 2>&1; then
@@ -76,13 +77,13 @@ finish_part_now() {
   actual=$(stat -c %s "$part")
   if [ "$actual" != "${sizes[$i]}" ]; then
     echo "[models] !! size mismatch for ${folders[$i]}/${names[$i]} ($actual != ${sizes[$i]}); removed" >&2
-    rm -f "$part"; return 1
+    rm -f "$part"; return 2
   fi
   if [ "${shas[$i]}" != - ]; then
     got=$(sha256sum "$part" | cut -d' ' -f1)
     if [ "$got" != "${shas[$i]}" ]; then
       echo "[models] !! sha256 mismatch for ${folders[$i]}/${names[$i]} (got ${got:0:12}..., want ${shas[$i]:0:12}...); refused and removed" >&2
-      rm -f "$part"; return 1
+      rm -f "$part"; return 3
     fi
   fi
   mv -n "$part" "$path"                      # -n: if the name appeared since the check, that file stays and the part goes
@@ -156,7 +157,7 @@ input="$work/aria2.input"
 
 real_url() {  # real_url <manifest url>: the URL to fetch (`civitai:<versionId>` carries the API key)
   case "$1" in
-    civitai:*) echo "https://civitai.com/api/download/models/${1#civitai:}?token=${CIVITAI_API_KEY:-}" ;;
+    civitai:*) echo "${CIVITAI_DOWNLOAD_URL:-https://civitai.com/api/download/models}/${1#civitai:}?token=${CIVITAI_API_KEY:-}" ;;
     *) echo "$1" ;;
   esac
 }
@@ -176,8 +177,8 @@ for i in "${!urls[@]}"; do
     else echo "[models] kept    ${folders[$i]}/${names[$i]} ($actual bytes, manifest says ${sizes[$i]}; add-only, not touched)"; fi
     continue
   fi
-  # a complete .part from an interrupted run only needs its check
-  if [ -f "$path.part" ] && [ ! -f "$path.part.aria2" ] && finish_part "$i"; then continue; fi
+  # a complete .part from an interrupted run only needs its check; a shorter one (curl stalled) is resumed by aria2
+  if [ -f "$path.part" ] && [ ! -f "$path.part.aria2" ] && [ "$(stat -c %s "$path.part")" = "${sizes[$i]}" ] && finish_part "$i"; then continue; fi
   todo+=("$i")
   echo "[models] fetch   ${folders[$i]}/${names[$i]} (${sizes[$i]} bytes)"
   status queued "$i"
@@ -260,30 +261,68 @@ left=()
 for i in "${todo[@]}"; do finish_part "$i" || left+=("$i"); done
 
 # ---- curl fallback (single connection, minimal headers) for files aria2 could not fetch -------------------------
-if [ ${#left[@]} -gt 0 ]; then
-  echo "[models] curl fallback for ${#left[@]} file(s)"
-  pids=()
-  for i in "${left[@]}"; do
-    path="$MODELS_DIR/${folders[$i]}/${names[$i]}"
-    rm -f "$path.part" "$path.part.aria2"
-    status queued "$i"                         # a new attempt for the agent: curl starts this file from zero
-    (
-      hdr=(); h=$(hf_header "${urls[$i]}"); [ -z "$h" ] || hdr=(-H "$h")
-      code=$(curl -sS -L --retry 3 --retry-delay 5 --max-time 3600 -A "Mozilla/5.0 (imagelab)" "${hdr[@]}" \
-               -o "$path.part" -w "%{http_code}" "$(real_url "${urls[$i]}")" 2>>"$work/curl-errors.log" || true)
-      if [ "$code" = 200 ]; then
-        finish_part "$i" || { echo "[models] curl FAILED ${folders[$i]}/${names[$i]} (http 200 but the file did not check out)" >&2
-                               status failed "$i" "downloaded, but the size or sha256 did not match"; }
-      else
-        echo "[models] curl FAILED ${folders[$i]}/${names[$i]} (http $code, $(stat -c %s "$path.part" 2>/dev/null || echo 0) bytes)" >&2
-        rm -f "$path.part"
-        status failed "$i" "http $code"
-      fi
-    ) &
-    pids+=($!)
+# At most DOWNLOAD_CURL_PARALLEL (3) at once. Each file gets up to DOWNLOAD_CURL_TRIES (3) tries that resume (-C -) what
+# the last one got; a stalled transfer (<100 KB/s for 2 min) or a dropped connection is retried, an answer that will
+# not change (a login page, an HTML page, http 4xx, a wrong sha256) is not. Each failure says why in its status line.
+CURL_PARALLEL=${DOWNLOAD_CURL_PARALLEL:-3}
+CURL_TRIES=${DOWNLOAD_CURL_TRIES:-3}
+CURL_RETRY_WAIT=${DOWNLOAD_CURL_RETRY_WAIT:-10}
+curl_one() {  # curl_one <i>: fetch one file with curl; 0 = in place. Writes its own status lines.
+  local i=$1 path part try out rc code ctype eff why= retry login hdr=() h
+  path="$MODELS_DIR/${folders[$i]}/${names[$i]}"; part="$path.part"
+  if [ -f "$part.aria2" ] || [ ! -s "$part" ]; then rm -f "$part" "$part.aria2"; fi   # aria2's segments: curl cannot resume those
+  status queued "$i"                         # a new attempt for the agent: curl starts this file over (or resumes its own part)
+  h=$(hf_header "${urls[$i]}"); [ -z "$h" ] || hdr=(-H "$h")
+  for try in $(seq 1 "$CURL_TRIES"); do
+    [ "$try" = 1 ] || sleep "$CURL_RETRY_WAIT"
+    # -f: an http error writes nothing into the part. The effective URL is only matched, never printed (it may carry the key).
+    out=$(curl -sS -f -L -C - --connect-timeout 30 --speed-limit 102400 --speed-time 120 -A "Mozilla/5.0 (imagelab)" "${hdr[@]}" \
+            -o "$part" -w '%{http_code}|%{content_type}|%{url_effective}' "$(real_url "${urls[$i]}")" 2>>"$work/curl-errors.log")
+    rc=$?
+    IFS='|' read -r code ctype eff <<< "$out"
+    retry=1
+    login=0
+    case "$eff" in *civitai.com/login*|*auth.civitai.com*) login=1 ;; esac
+    case "${urls[$i]}|$eff" in civitai:*\|*/login*) login=1 ;; esac
+    case "$login:$rc:$code:$ctype" in
+      1:*)
+        if [ -z "${CIVITAI_API_KEY:-}" ]; then why="CivitAI wants a login and CIVITAI_API_KEY is not set on the pod"
+        else why="CivitAI wants a login: CIVITAI_API_KEY was not accepted for this model"; fi
+        retry=0 ;;
+      0:0:*:text/html*) why="got an HTML page (http $code), not the file"; retry=0 ;;
+      0:0:*)
+        finish_part "$i"; case $? in
+          0) return 0 ;;
+          2) why="downloaded, but the size did not match the manifest" ;;          # finish_part removed the part: next try starts over
+          3) why="downloaded, but the sha256 did not match the manifest"; retry=0 ;;
+          *) why="downloaded, but the file is not there" ;;
+        esac ;;
+      0:22:*) why="http $code"; case "$code" in 408|425|429|5*) ;; *) retry=0 ;; esac ;;
+      0:28:*) why="stalled (under 100 KB/s for 2 min)" ;;
+      0:33:*) why="the server cannot resume"; rm -f "$part" ;;
+      0:6:*|0:7:*) why="could not connect (curl $rc)" ;;
+      0:18:*|0:52:*|0:56:*|0:92:*|0:16:*) why="the connection dropped (curl $rc)" ;;
+      *) why="curl error $rc (http ${code:-none})" ;;
+    esac
+    [ "$rc" != 0 ] || case "$ctype" in text/html*) rm -f "$part" ;; esac   # a page is not the file: never resume onto it
+    [ "$retry" = 1 ] && [ "$try" -lt "$CURL_TRIES" ] && echo "[models] curl retry  ${folders[$i]}/${names[$i]} ($why; try $((try+1)) of $CURL_TRIES)" >&2 && continue
+    break
   done
-  wait "${pids[@]}"
-  [ -s "$work/curl-errors.log" ] && { echo "[models] curl stderr:"; tail -20 "$work/curl-errors.log"; }
+  echo "[models] curl FAILED ${folders[$i]}/${names[$i]} ($why, $(stat -c %s "$part" 2>/dev/null || echo 0) bytes kept)" >&2
+  [ "$retry" = 1 ] || rm -f "$part"          # a stalled or dropped file keeps its part: the next attempt resumes it
+  status failed "$i" "$why"
+  return 1
+}
+if [ ${#left[@]} -gt 0 ]; then
+  echo "[models] curl fallback for ${#left[@]} file(s) ($CURL_PARALLEL at once)"
+  running=0
+  for i in "${left[@]}"; do
+    if [ "$running" -ge "$CURL_PARALLEL" ]; then wait -n; running=$((running-1)); fi
+    curl_one "$i" &
+    running=$((running+1))
+  done
+  wait
+  [ -s "$work/curl-errors.log" ] && { echo "[models] curl stderr:"; tail -20 "$work/curl-errors.log" | sed -E 's/token=[^ &"]*/token=.../g'; }
 fi
 
 # ---- verify ----------------------------------------------------------------------------------------------

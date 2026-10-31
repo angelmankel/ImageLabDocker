@@ -133,7 +133,7 @@ TAB=$'\t'
 check "status file: one run line, first" [ "$(grep -A1 '## status' <<< "$out" | tail -1)" = "run${TAB}197" ]
 check "status file: the missing file queued, then done (aria2's hook)" has "done${TAB}t197/a${TAB}config.json${TAB}402${TAB}/tmp/models/t197/a/config.json"
 check "status file: the kept file is no row" lacks "${TAB}t197/b${TAB}"
-check "status file: the wrong hash ends failed" has "failed${TAB}t197/c${TAB}config.json${TAB}402${TAB}/tmp/models/t197/c/config.json${TAB}downloaded, but the size or sha256 did not match"
+check "status file: the wrong hash ends failed" has "failed${TAB}t197/c${TAB}config.json${TAB}402${TAB}/tmp/models/t197/c/config.json${TAB}downloaded, but the sha256 did not match the manifest"
 
 # aria2's RPC for the agent's progress (gpu-agent 0.1.6), with the real aria2c: a local server sends a 24 MiB file
 # slowly (ranges, ~6 MiB/s), and while it runs the RPC file's address + secret must answer with that file's
