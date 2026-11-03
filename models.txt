@@ -187,3 +187,11 @@ https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_va
 https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors	loras	minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors	1956193000
 https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors	loras	minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors	1956192992
 https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors	loras	minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors	1956193000
+
+# --- SeedVR2 upscaler (ComfyUI-SeedVR2_VideoUpscaler, models/SEEDVR2; 2026-11-02) ---
+# 3B fp16 fits a 24 GB card; 7B fp8 (and its "sharp" variant) is the quality pick on big cards. One VAE for all.
+# The 7B fp8 files are the node registry's "mixed_block35" ones from AInVFX; numz's plain 7B fp8 is not in its list.
+https://huggingface.co/numz/SeedVR2_comfyUI/resolve/main/ema_vae_fp16.safetensors	SEEDVR2	ema_vae_fp16.safetensors	501324814
+https://huggingface.co/numz/SeedVR2_comfyUI/resolve/main/seedvr2_ema_3b_fp16.safetensors	SEEDVR2	seedvr2_ema_3b_fp16.safetensors	6783018808
+https://huggingface.co/AInVFX/SeedVR2_comfyUI/resolve/main/seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors	SEEDVR2	seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors	8466296338
+https://huggingface.co/AInVFX/SeedVR2_comfyUI/resolve/main/seedvr2_ema_7b_sharp_fp8_e4m3fn_mixed_block35_fp16.safetensors	SEEDVR2	seedvr2_ema_7b_sharp_fp8_e4m3fn_mixed_block35_fp16.safetensors	8466296338

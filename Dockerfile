@@ -126,6 +126,13 @@ need = {'ComfyUI-UltraTex': {'UltraTexPrep', 'UltraTexSampler', 'UltraTexBake'},
 got = {n: set(importlib.import_module(n).NODE_CLASS_MAPPINGS) for n in need}; print(got); \
 sys.exit(0 if all(need[n] <= got[n] for n in need) else 1)"
 
+# ---- SeedVR2: one-step video and image upscaler (ImageLab's SeedVR2 upscale) --------
+# Its models live in models/SEEDVR2 (models.txt); the node would also fetch a missing one itself on first use,
+# one slow connection at a time. Only rotary_embedding_torch is new; torch is re-asserted above, so this layer
+# sits after that RUN and must not pull another torch (the check below fails the build if it did).
+RUN install-node https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler        5a4bf428f3735cc72ac760d40f372f94dec28422 ComfyUI-SeedVR2_VideoUpscaler \
+    && python -c "import torch, sys; print('torch', torch.__version__); sys.exit(0 if torch.__version__.startswith('2.8.0') and torch.version.cuda.startswith('12.8') else 1)"
+
 # ---- ImageLabCore: the API the front end talks to ---------------------------------
 # This is what answers /imagelab/api/hashes, /imagelab/api/downloads and /imagelab/api/favorites. Without it
 # the app cannot ask a server what models it has, and the model browser shows nothing. Pinned like
