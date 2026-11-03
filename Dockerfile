@@ -130,7 +130,13 @@ sys.exit(0 if all(need[n] <= got[n] for n in need) else 1)"
 # Its models live in models/SEEDVR2 (models.txt); the node would also fetch a missing one itself on first use,
 # one slow connection at a time. Only rotary_embedding_torch is new; torch is re-asserted above, so this layer
 # sits after that RUN and must not pull another torch (the check below fails the build if it did).
+# Its two loaders build their device list at import and read devices[0]: with no GPU (the CPU build host's
+# quick test) the list is empty and the pack fails to import, so an empty list falls back to "cpu".
 RUN install-node https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler        5a4bf428f3735cc72ac760d40f372f94dec28422 ComfyUI-SeedVR2_VideoUpscaler \
+    && sed -i 's/devices = get_device_list()$/devices = get_device_list() or ["cpu"]/' \
+        /opt/ComfyUI/custom_nodes/ComfyUI-SeedVR2_VideoUpscaler/src/interfaces/dit_model_loader.py \
+        /opt/ComfyUI/custom_nodes/ComfyUI-SeedVR2_VideoUpscaler/src/interfaces/vae_model_loader.py \
+    && test "$(grep -c 'get_device_list() or \["cpu"\]' /opt/ComfyUI/custom_nodes/ComfyUI-SeedVR2_VideoUpscaler/src/interfaces/dit_model_loader.py /opt/ComfyUI/custom_nodes/ComfyUI-SeedVR2_VideoUpscaler/src/interfaces/vae_model_loader.py | grep -c ':1')" = 2 \
     && python -c "import torch, sys; print('torch', torch.__version__); sys.exit(0 if torch.__version__.startswith('2.8.0') and torch.version.cuda.startswith('12.8') else 1)"
 
 # ---- ImageLabCore: the API the front end talks to ---------------------------------
