@@ -3,7 +3,8 @@
 #
 # Which files: MODEL_PACKS (comma separated, default `image`) names manifests in packs/ (image.tsv,
 # video.tsv, 3d.tsv = Map Maker's duel-maps deploy/models/3d.tsv); MANIFEST=<file> replaces the packs
-# with one custom list (a trimmed one for a test pod). A manifest row is `url  folder  name  bytes  sha256`
+# with one custom list (a trimmed one for a test pod). MODEL_SKIP (comma separated) leaves rows out by file name
+# or folder/name: the pod start form's per-model picker sends the rows the user unticked. A manifest row is `url  folder  name  bytes  sha256`
 # (tab separated; a header row, blank lines and # comments are skipped; an old 4-column row has no hash).
 #
 # Add-only, as the model copy of gpu-agent DESIGN §8.1 / imagelab-server #175: a file that already has its
@@ -126,7 +127,10 @@ else
 fi
 
 # ---- read the rows ----------------------------------------------------------------------------------
-declare -A seen
+declare -A seen skip
+IFS=',' read -r -a skip_list <<< "${MODEL_SKIP:-}"
+for s_ in "${skip_list[@]}"; do s_=$(echo "$s_" | tr -d '[:space:]'); [ -z "$s_" ] || skip[$s_]=1; done
+skipped=0
 for m in "${manifests[@]}"; do
   while IFS=$'\t' read -r url folder name size sha _; do
     [ -n "${url:-}" ] || continue
@@ -136,6 +140,7 @@ for m in "${manifests[@]}"; do
     fi
     sha=$(echo "${sha:-}" | tr 'A-F' 'a-f'); [ -n "$sha" ] || sha=-
     key="$folder/$name"
+    if [ -n "${skip[$name]:-}" ] || [ -n "${skip[$key]:-}" ]; then skipped=$((skipped + 1)); continue; fi
     if [ -n "${seen[$key]:-}" ]; then
       [ "${seen[$key]}" = "$size" ] || echo "[models] !! $key is listed twice with different sizes ($size vs ${seen[$key]}); the first row wins" >&2
       continue
@@ -144,7 +149,7 @@ for m in "${manifests[@]}"; do
     urls+=("$url"); folders+=("$folder"); names+=("$name"); sizes+=("$size"); shas+=("$sha")
   done < "$m"
 done
-echo "[models] ${#urls[@]} file(s) in the selected manifests"
+echo "[models] ${#urls[@]} file(s) in the selected manifests ($skipped left out by MODEL_SKIP)"
 
 mkdir -p "$MODELS_DIR"
 if [ -n "$STATUS" ] && [ ! -s "$STATUS" ]; then   # before the umask: nginx serves it as /pod/logs/startup-downloads.tsv
