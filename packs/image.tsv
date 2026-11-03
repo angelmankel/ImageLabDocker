@@ -133,3 +133,9 @@ https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/parsing_parsenet.p
 
 # --- Upscalers (2x-AnimeJaNai has no stable HF home; skipped) ---
 https://huggingface.co/Kim2091/AnimeSharp/resolve/main/4x-AnimeSharp.pth	upscale_models	4x-AnimeSharp.pth	67010245	e7a7de2dafd7331c1992862bbbcd9e9712a9f9f8e6303f0aaa59b4341d359bab
+
+# --- SeedVR2 upscaler (ComfyUI-SeedVR2_VideoUpscaler, models/SEEDVR2; 2026-11-02) ---
+# VAE + 3B fp16 (24 GB cards) + the registry's 7B fp8 mixed file (ImageLab's default on cards of 40 GB+). The 7B "sharp" variant downloads from the app.
+https://huggingface.co/numz/SeedVR2_comfyUI/resolve/main/ema_vae_fp16.safetensors	SEEDVR2	ema_vae_fp16.safetensors	501324814
+https://huggingface.co/numz/SeedVR2_comfyUI/resolve/main/seedvr2_ema_3b_fp16.safetensors	SEEDVR2	seedvr2_ema_3b_fp16.safetensors	6783018808
+https://huggingface.co/AInVFX/SeedVR2_comfyUI/resolve/main/seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors	SEEDVR2	seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors	8466296338
