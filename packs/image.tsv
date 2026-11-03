@@ -136,6 +136,6 @@ https://huggingface.co/Kim2091/AnimeSharp/resolve/main/4x-AnimeSharp.pth	upscale
 
 # --- SeedVR2 upscaler (ComfyUI-SeedVR2_VideoUpscaler, models/SEEDVR2; 2026-11-02) ---
 # VAE + 3B fp16 (24 GB cards) + the registry's 7B fp8 mixed file (ImageLab's default on cards of 40 GB+). The 7B "sharp" variant downloads from the app.
-https://huggingface.co/numz/SeedVR2_comfyUI/resolve/main/ema_vae_fp16.safetensors	SEEDVR2	ema_vae_fp16.safetensors	501324814
-https://huggingface.co/numz/SeedVR2_comfyUI/resolve/main/seedvr2_ema_3b_fp16.safetensors	SEEDVR2	seedvr2_ema_3b_fp16.safetensors	6783018808
-https://huggingface.co/AInVFX/SeedVR2_comfyUI/resolve/main/seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors	SEEDVR2	seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors	8466296338
+https://huggingface.co/numz/SeedVR2_comfyUI/resolve/main/ema_vae_fp16.safetensors	SEEDVR2	ema_vae_fp16.safetensors	501324814	20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1
+https://huggingface.co/numz/SeedVR2_comfyUI/resolve/main/seedvr2_ema_3b_fp16.safetensors	SEEDVR2	seedvr2_ema_3b_fp16.safetensors	6783018808	2fd0e03a3dad24e07086750360727ca437de4ecd456f769856e960ae93e2b304
+https://huggingface.co/AInVFX/SeedVR2_comfyUI/resolve/main/seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors	SEEDVR2	seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors	8466296338	3d68b5ec0b295ae28092e355c8cad870edd00b817b26587d0cb8f9dd2df19bb2
